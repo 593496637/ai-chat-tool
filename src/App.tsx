@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { graphqlClient, CHAT_MUTATION, HELLO_QUERY } from './graphql';
 
 interface Message {
@@ -11,7 +13,8 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [useGraphQL, setUseGraphQL] = useState(true); // 默认使用GraphQL
+  const [useGraphQL, setUseGraphQL] = useState(true);
+  const [useMarkdown, setUseMarkdown] = useState(true); // 新增：是否使用Markdown渲染
 
   // GraphQL方式发送消息
   const sendMessageGraphQL = async (userMessage: Message) => {
@@ -121,10 +124,29 @@ function App() {
     }
   };
 
+  const clearChat = () => {
+    setMessages([]);
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       sendMessage();
     }
+  };
+
+  // 渲染消息内容
+  const renderMessageContent = (message: Message) => {
+    if (message.role === 'assistant' && useMarkdown) {
+      return (
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]}
+          className="markdown-content"
+        >
+          {message.content}
+        </ReactMarkdown>
+      );
+    }
+    return <span className="text-content">{message.content}</span>;
   };
 
   return (
@@ -140,8 +162,19 @@ function App() {
             />
             使用 GraphQL
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={useMarkdown}
+              onChange={(e) => setUseMarkdown(e.target.checked)}
+            />
+            Markdown渲染
+          </label>
           <button onClick={testGraphQL} className="test-btn">
             测试GraphQL
+          </button>
+          <button onClick={clearChat} className="test-btn clear-btn">
+            清空对话
           </button>
         </div>
       </div>
@@ -150,7 +183,7 @@ function App() {
         {messages.map((message) => (
           <div key={message.id} className={`message ${message.role}`}>
             <div className="message-content">
-              {message.content}
+              {renderMessageContent(message)}
             </div>
           </div>
         ))}
@@ -158,6 +191,16 @@ function App() {
           <div className="message assistant">
             <div className="message-content loading">
               正在思考中... ({useGraphQL ? 'GraphQL' : 'REST API'})
+            </div>
+          </div>
+        )}
+        {messages.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-content">
+              <h3>👋 欢迎使用AI聊天助手</h3>
+              <p>支持GraphQL和REST API双模式</p>
+              <p>支持Markdown格式渲染</p>
+              <p>请输入您的问题开始对话...</p>
             </div>
           </div>
         )}
