@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { graphqlClient, CHAT_MUTATION, HELLO_QUERY } from './graphql';
 
 interface Message {
   id: number;
@@ -13,74 +12,9 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [useGraphQL, setUseGraphQL] = useState(true);
-  const [useMarkdown, setUseMarkdown] = useState(true); // 新增：是否使用Markdown渲染
-
-  // GraphQL方式发送消息
-  const sendMessageGraphQL = async (userMessage: Message) => {
-    try {
-      const result = await graphqlClient.query(CHAT_MUTATION, {
-        input: {
-          messages: [...messages, userMessage].map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
-        }
-      });
-
-      console.log('GraphQL result:', result);
-
-      const assistantMessage: Message = {
-        id: Date.now() + 1,
-        content: result.chat?.choices?.[0]?.message?.content || 
-                result.choices?.[0]?.message?.content || 
-                '抱歉，我无法回答这个问题。',
-        role: 'assistant'
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('GraphQL Error:', error);
-      throw error;
-    }
-  };
+  const [useMarkdown, setUseMarkdown] = useState(true);
 
   // REST API方式发送消息
-  const sendMessageREST = async (userMessage: Message) => {
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('REST API result:', data);
-      
-      const assistantMessage: Message = {
-        id: Date.now() + 1,
-        content: data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。',
-        role: 'assistant'
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
-      console.error('REST API Error:', error);
-      throw error;
-    }
-  };
-
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
@@ -95,11 +29,39 @@ function App() {
     setLoading(true);
 
     try {
-      if (useGraphQL) {
-        await sendMessageGraphQL(userMessage);
-      } else {
-        await sendMessageREST(userMessage);
+      console.log('Sending message...');
+      const startTime = Date.now();
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [...messages, userMessage].map(msg => ({
+            role: msg.role,
+            content: msg.content
+          }))
+        }),
+      });
+
+      const duration = Date.now() - startTime;
+      console.log(`Request completed in ${duration}ms`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+
+      const data = await response.json();
+      console.log('API response:', data);
+      
+      const assistantMessage: Message = {
+        id: Date.now() + 1,
+        content: data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。',
+        role: 'assistant'
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error:', error);
       const errorMessage: Message = {
@@ -110,17 +72,6 @@ function App() {
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const testGraphQL = async () => {
-    try {
-      const result = await graphqlClient.query(HELLO_QUERY);
-      console.log('Hello query result:', result);
-      alert(`GraphQL测试成功: ${result.hello || '连接正常'}`);
-    } catch (error) {
-      console.error('GraphQL test error:', error);
-      alert(`GraphQL测试失败: ${error}`);
     }
   };
 
@@ -157,22 +108,11 @@ function App() {
           <label>
             <input
               type="checkbox"
-              checked={useGraphQL}
-              onChange={(e) => setUseGraphQL(e.target.checked)}
-            />
-            使用 GraphQL
-          </label>
-          <label>
-            <input
-              type="checkbox"
               checked={useMarkdown}
               onChange={(e) => setUseMarkdown(e.target.checked)}
             />
             Markdown渲染
           </label>
-          <button onClick={testGraphQL} className="test-btn">
-            测试GraphQL
-          </button>
           <button onClick={clearChat} className="test-btn clear-btn">
             清空对话
           </button>
@@ -180,27 +120,28 @@ function App() {
       </div>
       
       <div className="chat-messages">
-        {messages.map((message) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            <div className="message-content">
-              {renderMessageContent(message)}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="message assistant">
-            <div className="message-content loading">
-              正在思考中... ({useGraphQL ? 'GraphQL' : 'REST API'})
-            </div>
-          </div>
-        )}
-        {messages.length === 0 && (
+        {messages.length === 0 ? (
           <div className="empty-state">
             <div className="empty-content">
               <h3>👋 欢迎使用AI聊天助手</h3>
-              <p>支持GraphQL和REST API双模式</p>
+              <p>基于DeepSeek API</p>
               <p>支持Markdown格式渲染</p>
               <p>请输入您的问题开始对话...</p>
+            </div>
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div key={message.id} className={`message ${message.role}`}>
+              <div className="message-content">
+                {renderMessageContent(message)}
+              </div>
+            </div>
+          ))
+        )}
+        {loading && (
+          <div className="message assistant">
+            <div className="message-content loading">
+              正在思考中...
             </div>
           </div>
         )}
