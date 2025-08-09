@@ -17,6 +17,7 @@ function App() {
   const [useMarkdown, setUseMarkdown] = useState(true);
   const [useGraphQL, setUseGraphQL] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
+  const [autoFallback, setAutoFallback] = useState(true); // 自动回退功能
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 测试 GraphQL 连接
@@ -25,16 +26,28 @@ function App() {
       try {
         const isConnected = await testGraphQLConnection();
         setConnectionStatus(isConnected ? 'connected' : 'error');
+        
+        // 如果 GraphQL 连接失败且开启自动回退，切换到 REST
+        if (!isConnected && autoFallback && useGraphQL) {
+          console.log('GraphQL连接失败，自动切换到REST API');
+          setUseGraphQL(false);
+        }
       } catch (error) {
         console.error('Connection test failed:', error);
         setConnectionStatus('error');
+        
+        // 自动回退到 REST API
+        if (autoFallback && useGraphQL) {
+          console.log('GraphQL连接失败，自动切换到REST API');
+          setUseGraphQL(false);
+        }
       }
     };
 
     if (useGraphQL) {
       testConnection();
     }
-  }, [useGraphQL]);
+  }, [useGraphQL, autoFallback]);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -52,8 +65,20 @@ function App() {
       content: msg.content
     }));
 
-    const response = await sendChatMessage(graphqlMessages);
-    return response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
+    try {
+      const response = await sendChatMessage(graphqlMessages);
+      return response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
+    } catch (error) {
+      // GraphQL 失败时，如果开启自动回退，切换到 REST
+      if (autoFallback) {
+        console.log('GraphQL请求失败，自动切换到REST API重试');
+        setUseGraphQL(false);
+        setConnectionStatus('error');
+        // 重新用 REST API 发送
+        return await sendMessageREST(messageHistory);
+      }
+      throw error;
+    }
   };
 
   // REST API 方式发送消息
@@ -143,6 +168,14 @@ function App() {
     }
   };
 
+  // 手动切换 GraphQL/REST
+  const handleGraphQLToggle = (enabled: boolean) => {
+    setUseGraphQL(enabled);
+    if (enabled) {
+      setConnectionStatus('unknown');
+    }
+  };
+
   // 格式化时间
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('zh-CN', { 
@@ -198,6 +231,11 @@ function App() {
                     {getConnectionStatusIcon()} {getConnectionStatusText()}
                   </span>
                 )}
+                {!useGraphQL && autoFallback && (
+                  <span className="connection-status">
+                    🔄 自动回退模式
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -218,11 +256,24 @@ function App() {
               <input
                 type="checkbox"
                 checked={useGraphQL}
-                onChange={(e) => setUseGraphQL(e.target.checked)}
+                onChange={(e) => handleGraphQLToggle(e.target.checked)}
               />
               <span className="slider">
                 <span className="slider-text">
                   {useGraphQL ? 'GQL' : 'REST'}
+                </span>
+              </span>
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={autoFallback}
+                onChange={(e) => setAutoFallback(e.target.checked)}
+                title="自动回退：GraphQL失败时自动切换到REST API"
+              />
+              <span className="slider">
+                <span className="slider-text">
+                  {autoFallback ? 'AUTO' : 'MAN'}
                 </span>
               </span>
             </label>
@@ -257,6 +308,11 @@ function App() {
                 </div>
               </div>
               <p className="start-hint">输入您的问题开始智能对话...</p>
+              {autoFallback && (
+                <p className="auto-fallback-hint">
+                  🔄 已启用自动回退：GraphQL失败时将自动切换到REST API
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -322,7 +378,9 @@ function App() {
             </button>
           </div>
           <div className="input-hint">
-            当前使用: {useGraphQL ? 'GraphQL' : 'REST API'} • 输入消息后按 Enter 发送，Shift+Enter 换行
+            当前使用: {useGraphQL ? 'GraphQL' : 'REST API'} 
+            {autoFallback && ' • 自动回退已启用'}
+            {' • 输入消息后按 Enter 发送，Shift+Enter 换行'}
           </div>
         </div>
       </div>
