@@ -3,7 +3,14 @@ export class GraphQLClient {
   constructor(private endpoint: string) {}
 
   async query(query: string, variables?: any) {
+    // 添加15秒超时
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
+      console.log('Sending GraphQL request...');
+      const startTime = Date.now();
+
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: {
@@ -13,7 +20,12 @@ export class GraphQLClient {
           query,
           variables
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
+      const duration = Date.now() - startTime;
+      console.log(`GraphQL request completed in ${duration}ms`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -27,6 +39,10 @@ export class GraphQLClient {
 
       return result.data;
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new Error('请求超时，请检查网络连接');
+      }
       console.error('GraphQL query error:', error);
       throw error;
     }
