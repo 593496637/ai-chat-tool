@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { sendChatMessage, testGraphQLConnection, Message as GraphQLMessage } from './graphql';
 
 interface Message {
   id: number;
@@ -14,7 +15,26 @@ function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [useMarkdown, setUseMarkdown] = useState(true);
+  const [useGraphQL, setUseGraphQL] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 测试 GraphQL 连接
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const isConnected = await testGraphQLConnection();
+        setConnectionStatus(isConnected ? 'connected' : 'error');
+      } catch (error) {
+        console.error('Connection test failed:', error);
+        setConnectionStatus('error');
+      }
+    };
+
+    if (useGraphQL) {
+      testConnection();
+    }
+  }, [useGraphQL]);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -25,7 +45,41 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  // REST API方式发送消息
+  // GraphQL 方式发送消息
+  const sendMessageGraphQL = async (messageHistory: Message[]) => {
+    const graphqlMessages: GraphQLMessage[] = messageHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
+    const response = await sendChatMessage(graphqlMessages);
+    return response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
+  };
+
+  // REST API 方式发送消息
+  const sendMessageREST = async (messageHistory: Message[]) => {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: messageHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
+  };
+
+  // 统一的发送消息方法
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
@@ -36,40 +90,29 @@ function App() {
       timestamp: new Date()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInput('');
     setLoading(true);
 
     try {
-      console.log('Sending message...');
+      console.log(`Sending message via ${useGraphQL ? 'GraphQL' : 'REST API'}...`);
       const startTime = Date.now();
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }))
-        }),
-      });
+      let responseContent: string;
+      
+      if (useGraphQL) {
+        responseContent = await sendMessageGraphQL(newMessages);
+      } else {
+        responseContent = await sendMessageREST(newMessages);
+      }
 
       const duration = Date.now() - startTime;
       console.log(`Request completed in ${duration}ms`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('API response:', data);
       
       const assistantMessage: Message = {
         id: Date.now() + 1,
-        content: data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。',
+        content: responseContent,
         role: 'assistant',
         timestamp: new Date()
       };
@@ -79,7 +122,7 @@ function App() {
       console.error('Error:', error);
       const errorMessage: Message = {
         id: Date.now() + 1,
-        content: '抱歉，发生了错误，请稍后再试。错误详情请查看控制台。',
+        content: `抱歉，发生了错误：${error instanceof Error ? error.message : '未知错误'}。请稍后再试。`,
         role: 'assistant',
         timestamp: new Date()
       };
@@ -123,6 +166,23 @@ function App() {
     return <span className="text-content">{message.content}</span>;
   };
 
+  // 获取连接状态显示
+  const getConnectionStatusIcon = () => {
+    switch (connectionStatus) {
+      case 'connected': return '🟢';
+      case 'error': return '🔴';
+      default: return '🟡';
+    }
+  };
+
+  const getConnectionStatusText = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'GraphQL已连接';
+      case 'error': return 'GraphQL连接失败';
+      default: return '检查连接中...';
+    }
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-header">
@@ -131,7 +191,14 @@ function App() {
             <div className="ai-icon">🤖</div>
             <div>
               <h1>AI聊天助手</h1>
-              <p className="subtitle">基于 DeepSeek API • 支持 Markdown</p>
+              <p className="subtitle">
+                基于 DeepSeek API • 支持 {useGraphQL ? 'GraphQL' : 'REST'} 
+                {useGraphQL && (
+                  <span className="connection-status">
+                    {getConnectionStatusIcon()} {getConnectionStatusText()}
+                  </span>
+                )}
+              </p>
             </div>
           </div>
           <div className="header-controls">
@@ -144,6 +211,18 @@ function App() {
               <span className="slider">
                 <span className="slider-text">
                   {useMarkdown ? 'MD' : 'TXT'}
+                </span>
+              </span>
+            </label>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={useGraphQL}
+                onChange={(e) => setUseGraphQL(e.target.checked)}
+              />
+              <span className="slider">
+                <span className="slider-text">
+                  {useGraphQL ? 'GQL' : 'REST'}
                 </span>
               </span>
             </label>
@@ -174,7 +253,7 @@ function App() {
                 </div>
                 <div className="feature">
                   <span className="feature-icon">⚡</span>
-                  <span>快速响应</span>
+                  <span>{useGraphQL ? 'GraphQL' : 'REST'} API</span>
                 </div>
               </div>
               <p className="start-hint">输入您的问题开始智能对话...</p>
@@ -210,7 +289,9 @@ function App() {
                     <span></span>
                     <span></span>
                   </div>
-                  <span className="thinking-text">AI 正在思考中...</span>
+                  <span className="thinking-text">
+                    AI 正在通过 {useGraphQL ? 'GraphQL' : 'REST API'} 思考中...
+                  </span>
                 </div>
               </div>
             </div>
@@ -241,7 +322,7 @@ function App() {
             </button>
           </div>
           <div className="input-hint">
-            输入消息后按 Enter 发送，Shift+Enter 换行
+            当前使用: {useGraphQL ? 'GraphQL' : 'REST API'} • 输入消息后按 Enter 发送，Shift+Enter 换行
           </div>
         </div>
       </div>
