@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { sendChatMessage, testGraphQLConnection, Message as GraphQLMessage } from './graphql';
+import { sendChatMessage, Message as GraphQLMessage } from './graphql';
 
 interface Message {
   id: number;
