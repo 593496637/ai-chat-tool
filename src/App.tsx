@@ -16,38 +16,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [useMarkdown, setUseMarkdown] = useState(true);
   const [useGraphQL, setUseGraphQL] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
-  const [autoFallback, setAutoFallback] = useState(true); // 自动回退功能
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // 测试 GraphQL 连接
-  useEffect(() => {
-    const testConnection = async () => {
-      try {
-        const isConnected = await testGraphQLConnection();
-        setConnectionStatus(isConnected ? 'connected' : 'error');
-        
-        // 如果 GraphQL 连接失败且开启自动回退，切换到 REST
-        if (!isConnected && autoFallback && useGraphQL) {
-          console.log('GraphQL连接失败，自动切换到REST API');
-          setUseGraphQL(false);
-        }
-      } catch (error) {
-        console.error('Connection test failed:', error);
-        setConnectionStatus('error');
-        
-        // 自动回退到 REST API
-        if (autoFallback && useGraphQL) {
-          console.log('GraphQL连接失败，自动切换到REST API');
-          setUseGraphQL(false);
-        }
-      }
-    };
-
-    if (useGraphQL) {
-      testConnection();
-    }
-  }, [useGraphQL, autoFallback]);
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -69,15 +38,10 @@ function App() {
       const response = await sendChatMessage(graphqlMessages);
       return response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
     } catch (error) {
-      // GraphQL 失败时，如果开启自动回退，切换到 REST
-      if (autoFallback) {
-        console.log('GraphQL请求失败，自动切换到REST API重试');
-        setUseGraphQL(false);
-        setConnectionStatus('error');
-        // 重新用 REST API 发送
-        return await sendMessageREST(messageHistory);
-      }
-      throw error;
+      // GraphQL 失败时自动切换到 REST
+      console.log('GraphQL请求失败，切换到REST API');
+      setUseGraphQL(false);
+      return await sendMessageREST(messageHistory);
     }
   };
 
@@ -104,7 +68,7 @@ function App() {
     return data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
   };
 
-  // 统一的发送消息方法
+  // 发送消息
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
@@ -121,9 +85,6 @@ function App() {
     setLoading(true);
 
     try {
-      console.log(`Sending message via ${useGraphQL ? 'GraphQL' : 'REST API'}...`);
-      const startTime = Date.now();
-
       let responseContent: string;
       
       if (useGraphQL) {
@@ -131,9 +92,6 @@ function App() {
       } else {
         responseContent = await sendMessageREST(newMessages);
       }
-
-      const duration = Date.now() - startTime;
-      console.log(`Request completed in ${duration}ms`);
       
       const assistantMessage: Message = {
         id: Date.now() + 1,
@@ -147,7 +105,7 @@ function App() {
       console.error('Error:', error);
       const errorMessage: Message = {
         id: Date.now() + 1,
-        content: `抱歉，发生了错误：${error instanceof Error ? error.message : '未知错误'}。请稍后再试。`,
+        content: `发生错误：${error instanceof Error ? error.message : '未知错误'}`,
         role: 'assistant',
         timestamp: new Date()
       };
@@ -168,221 +126,88 @@ function App() {
     }
   };
 
-  // 手动切换 GraphQL/REST
-  const handleGraphQLToggle = (enabled: boolean) => {
-    setUseGraphQL(enabled);
-    if (enabled) {
-      setConnectionStatus('unknown');
-    }
-  };
-
-  // 格式化时间
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('zh-CN', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
   // 渲染消息内容
   const renderMessageContent = (message: Message) => {
     if (message.role === 'assistant' && useMarkdown) {
       return (
-        <ReactMarkdown 
-          remarkPlugins={[remarkGfm]}
-          className="markdown-content"
-        >
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {message.content}
         </ReactMarkdown>
       );
     }
-    return <span className="text-content">{message.content}</span>;
-  };
-
-  // 获取连接状态显示
-  const getConnectionStatusIcon = () => {
-    switch (connectionStatus) {
-      case 'connected': return '🟢';
-      case 'error': return '🔴';
-      default: return '🟡';
-    }
-  };
-
-  const getConnectionStatusText = () => {
-    switch (connectionStatus) {
-      case 'connected': return 'GraphQL已连接';
-      case 'error': return 'GraphQL连接失败';
-      default: return '检查连接中...';
-    }
+    return <div>{message.content}</div>;
   };
 
   return (
-    <div className="chat-container">
-      <div className="chat-header">
-        <div className="header-content">
-          <div className="header-title">
-            <div className="ai-icon">🤖</div>
-            <div>
-              <h1>AI聊天助手</h1>
-              <p className="subtitle">
-                基于 DeepSeek API • 支持 {useGraphQL ? 'GraphQL' : 'REST'} 
-                {useGraphQL && (
-                  <span className="connection-status">
-                    {getConnectionStatusIcon()} {getConnectionStatusText()}
-                  </span>
-                )}
-                {!useGraphQL && autoFallback && (
-                  <span className="connection-status">
-                    🔄 自动回退模式
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-          <div className="header-controls">
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={useMarkdown}
-                onChange={(e) => setUseMarkdown(e.target.checked)}
-              />
-              <span className="slider">
-                <span className="slider-text">
-                  {useMarkdown ? 'MD' : 'TXT'}
-                </span>
-              </span>
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={useGraphQL}
-                onChange={(e) => handleGraphQLToggle(e.target.checked)}
-              />
-              <span className="slider">
-                <span className="slider-text">
-                  {useGraphQL ? 'GQL' : 'REST'}
-                </span>
-              </span>
-            </label>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={autoFallback}
-                onChange={(e) => setAutoFallback(e.target.checked)}
-                title="自动回退：GraphQL失败时自动切换到REST API"
-              />
-              <span className="slider">
-                <span className="slider-text">
-                  {autoFallback ? 'AUTO' : 'MAN'}
-                </span>
-              </span>
-            </label>
-            <button onClick={clearChat} className="clear-btn" title="清空对话">
-              🗑️
-            </button>
-          </div>
+    <div className="app">
+      {/* 头部 */}
+      <div className="header">
+        <h1>AI 聊天助手</h1>
+        <div className="controls">
+          <label>
+            <input
+              type="checkbox"
+              checked={useMarkdown}
+              onChange={(e) => setUseMarkdown(e.target.checked)}
+            />
+            Markdown
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={useGraphQL}
+              onChange={(e) => setUseGraphQL(e.target.checked)}
+            />
+            GraphQL
+          </label>
+          <button onClick={clearChat}>清空</button>
         </div>
       </div>
-      
-      <div className="chat-messages">
+
+      {/* 消息区域 */}
+      <div className="messages">
         {messages.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-content">
-              <div className="welcome-animation">
-                <div className="ai-avatar">🤖</div>
-                <div className="sparkles">✨</div>
-              </div>
-              <h3>欢迎使用 AI 聊天助手</h3>
-              <div className="features">
-                <div className="feature">
-                  <span className="feature-icon">💬</span>
-                  <span>智能对话</span>
-                </div>
-                <div className="feature">
-                  <span className="feature-icon">📝</span>
-                  <span>Markdown 支持</span>
-                </div>
-                <div className="feature">
-                  <span className="feature-icon">⚡</span>
-                  <span>{useGraphQL ? 'GraphQL' : 'REST'} API</span>
-                </div>
-              </div>
-              <p className="start-hint">输入您的问题开始智能对话...</p>
-              {autoFallback && (
-                <p className="auto-fallback-hint">
-                  🔄 已启用自动回退：GraphQL失败时将自动切换到REST API
-                </p>
-              )}
-            </div>
+          <div className="empty">
+            <h2>欢迎使用 AI 聊天助手</h2>
+            <p>当前模式: {useGraphQL ? 'GraphQL' : 'REST API'}</p>
+            <p>请输入您的问题开始对话</p>
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className={`message-wrapper ${message.role}`}>
-              <div className="message">
-                <div className="message-avatar">
-                  {message.role === 'user' ? '👤' : '🤖'}
-                </div>
-                <div className="message-bubble">
-                  <div className="message-content">
-                    {renderMessageContent(message)}
-                  </div>
-                  <div className="message-time">
-                    {formatTime(message.timestamp)}
-                  </div>
-                </div>
+            <div key={message.id} className={`message ${message.role}`}>
+              <div className="avatar">
+                {message.role === 'user' ? '用户' : 'AI'}
+              </div>
+              <div className="content">
+                {renderMessageContent(message)}
               </div>
             </div>
           ))
         )}
         {loading && (
-          <div className="message-wrapper assistant">
-            <div className="message">
-              <div className="message-avatar">🤖</div>
-              <div className="message-bubble loading-bubble">
-                <div className="message-content">
-                  <div className="typing-indicator">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                  <span className="thinking-text">
-                    AI 正在通过 {useGraphQL ? 'GraphQL' : 'REST API'} 思考中...
-                  </span>
-                </div>
-              </div>
-            </div>
+          <div className="message assistant">
+            <div className="avatar">AI</div>
+            <div className="content">正在思考...</div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
-      
-      <div className="chat-input">
-        <div className="input-container">
-          <div className="input-wrapper">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="输入您的问题... (Shift+Enter 换行)"
-              disabled={loading}
-              rows={1}
-              className="message-input"
-            />
-            <button 
-              onClick={sendMessage} 
-              disabled={!input.trim() || loading}
-              className={`send-btn ${input.trim() && !loading ? 'active' : ''}`}
-              title="发送消息"
-            >
-              {loading ? '⏳' : '🚀'}
-            </button>
-          </div>
-          <div className="input-hint">
-            当前使用: {useGraphQL ? 'GraphQL' : 'REST API'} 
-            {autoFallback && ' • 自动回退已启用'}
-            {' • 输入消息后按 Enter 发送，Shift+Enter 换行'}
-          </div>
-        </div>
+
+      {/* 输入区域 */}
+      <div className="input-area">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+          disabled={loading}
+        />
+        <button 
+          onClick={sendMessage} 
+          disabled={!input.trim() || loading}
+        >
+          发送
+        </button>
       </div>
     </div>
   );
