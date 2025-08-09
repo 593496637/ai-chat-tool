@@ -1,4 +1,4 @@
-// Cloudflare Workers - AI聊天API (GraphQL + REST)
+// Cloudflare Workers - AI聊天API (GraphQL + REST) - 修复版
 
 // DeepSeek API调用函数
 async function callDeepSeekAPI(messages, env) {
@@ -70,8 +70,8 @@ export default {
     }
 
     try {
-      // GraphQL端点
-      if (url.pathname === '/graphql') {
+      // GraphQL端点 - 支持多种路径
+      if (url.pathname === '/graphql' || url.pathname === '/api/graphql') {
         if (request.method !== 'POST') {
           console.log('GraphQL endpoint only accepts POST');
           return new Response('Method not allowed', { 
@@ -98,8 +98,12 @@ export default {
           });
         }
 
-        // 处理sendMessage mutation
-        if (body.query.includes('sendMessage')) {
+        // 规范化查询字符串，处理大小写和空格问题
+        const queryString = body.query.replace(/\s+/g, ' ').trim().toLowerCase();
+        console.log('Normalized query:', queryString);
+
+        // 处理sendMessage mutation (支持SendMessage和sendMessage两种写法)
+        if (queryString.includes('sendmessage') || queryString.includes('mutation')) {
           const variables = body.variables || {};
           const messages = variables.input?.messages || [];
           
@@ -125,7 +129,7 @@ export default {
         }
 
         // 处理hello query
-        if (body.query.includes('hello')) {
+        if (queryString.includes('hello') || queryString.includes('query')) {
           console.log('Executing hello query');
           return new Response(JSON.stringify({
             data: { hello: 'Hello from GraphQL API!' }
@@ -187,11 +191,33 @@ export default {
         });
       }
 
+      // 健康检查端点
+      if (url.pathname === '/health' || url.pathname === '/') {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          endpoints: {
+            graphql: '/graphql',
+            rest: '/api/chat',
+            health: '/health'
+          }
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+
       // 其他路径返回404
       console.log(`Unknown path: ${url.pathname}`);
-      return new Response(`Not Found: ${url.pathname}`, { 
+      return new Response(JSON.stringify({
+        error: 'Not Found',
+        path: url.pathname,
+        available_endpoints: ['/graphql', '/api/graphql', '/api/chat', '/health']
+      }), { 
         status: 404,
         headers: {
+          'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
         },
       });
