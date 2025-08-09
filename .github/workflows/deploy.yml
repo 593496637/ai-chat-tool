@@ -32,36 +32,36 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 
-  # 部署Cloudflare Pages (前端)
-  deploy-pages:
-    runs-on: ubuntu-latest
-    name: Deploy Frontend to Pages
-    needs: deploy-workers  # 等待Workers部署完成
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # 部署Cloudflare Pages (前端) - 暂时注释掉，手动部署
+  # deploy-pages:
+  #   runs-on: ubuntu-latest
+  #   name: Deploy Frontend to Pages
+  #   needs: deploy-workers
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '18'
 
-      - name: Install dependencies
-        run: npm install
+  #     - name: Install dependencies
+  #       run: npm install
 
-      - name: Build project
-        run: npm run build
+  #     - name: Build project
+  #       run: npm run build
 
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/pages-action@v1
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ai-chat-tool
-          directory: dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Deploy to Cloudflare Pages
+  #       uses: cloudflare/pages-action@v1
+  #       with:
+  #         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  #         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  #         projectName: ai-chat-tool
+  #         directory: dist
+  #         gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
-  # 简化的测试流程
+  # 构建测试
   test:
     runs-on: ubuntu-latest
     name: Build Test
@@ -77,7 +77,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build test
+      - name: Build project
         run: npm run build
 
       - name: Check build output
