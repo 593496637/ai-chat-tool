@@ -1,7 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { sendChatMessage, testGraphQLConnection, getHealthStatus, Message as GraphQLMessage } from './graphql';
+import { 
+  sendChatMessage, 
+  testGraphQLConnection, 
+  getHealthStatus, 
+  refreshGraphQLEndpoint,
+  getCurrentValidEndpoint,
+  Message as GraphQLMessage 
+} from './graphql';
 
 interface Message {
   id: number;
@@ -18,6 +25,7 @@ function App() {
   const [useGraphQL, setUseGraphQL] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'failed'>('unknown');
   const [lastError, setLastError] = useState<string>('');
+  const [currentEndpoint, setCurrentEndpoint] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
@@ -31,13 +39,23 @@ function App() {
 
   // 检查连接状态
   const checkConnection = async () => {
+    setConnectionStatus('unknown');
+    setLastError('');
+    
     try {
-      const health = await getHealthStatus();
-      const graphqlTest = await testGraphQLConnection();
+      const [health, graphqlTest] = await Promise.all([
+        getHealthStatus(),
+        testGraphQLConnection()
+      ]);
       
       if (health && graphqlTest) {
         setConnectionStatus('connected');
         setLastError('');
+        // 获取当前使用的端点
+        const endpoint = getCurrentValidEndpoint();
+        if (endpoint) {
+          setCurrentEndpoint(endpoint);
+        }
       } else {
         setConnectionStatus('failed');
         setLastError('无法连接到GraphQL服务');
@@ -53,7 +71,18 @@ function App() {
     checkConnection();
   }, []);
 
-  // GraphQL 方式发送消息 - 增强错误处理
+  // 刷新端点
+  const handleRefreshEndpoint = async () => {
+    try {
+      const newEndpoint = await refreshGraphQLEndpoint();
+      setCurrentEndpoint(newEndpoint);
+      await checkConnection();
+    } catch (error) {
+      setLastError(`端点刷新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
+  // GraphQL 方式发送消息 - 优化版本，避免重复请求
   const sendMessageGraphQL = async (messageHistory: Message[]) => {
     const graphqlMessages: GraphQLMessage[] = messageHistory.map(msg => ({
       role: msg.role,
@@ -75,7 +104,7 @@ function App() {
     }
   };
 
-  // REST API 方式发送消息 - 增强错误处理
+  // REST API 方式发送消息
   const sendMessageREST = async (messageHistory: Message[]) => {
     try {
       const response = await fetch('/api/chat', {
@@ -194,6 +223,11 @@ function App() {
         <h1>AI 聊天助手</h1>
         <div className="status">
           {getStatusIndicator()}
+          {currentEndpoint && (
+            <span style={{fontSize: '12px', color: '#666', marginLeft: '10px'}}>
+              端点: {currentEndpoint}
+            </span>
+          )}
         </div>
         <div className="controls">
           <label>
@@ -213,6 +247,9 @@ function App() {
             GraphQL
           </label>
           <button onClick={checkConnection}>测试连接</button>
+          <button onClick={handleRefreshEndpoint} disabled={loading}>
+            刷新端点
+          </button>
           <button onClick={clearChat}>清空</button>
         </div>
       </div>
@@ -235,20 +272,25 @@ function App() {
       <div className="messages">
         {messages.length === 0 ? (
           <div className="empty">
-            <h2>欢迎使用 AI 聊天助手</h2>
+            <h2>欢迎使用 AI 聊天助手 🤖</h2>
             <p>当前模式: {useGraphQL ? 'GraphQL' : 'REST API'}</p>
             <p>连接状态: {getStatusIndicator()}</p>
+            {currentEndpoint && <p>GraphQL端点: {currentEndpoint}</p>}
             <p>请输入您的问题开始对话</p>
           </div>
         ) : (
           messages.map((message) => (
             <div key={message.id} className={`message ${message.role}`}>
               <div className="avatar">
-                {message.role === 'user' ? '用户' : 'AI'}
+                {message.role === 'user' ? '👤' : '🤖'}
               </div>
               <div className="content">
                 {renderMessageContent(message)}
-                <div className="timestamp">
+                <div className="timestamp" style={{
+                  fontSize: '11px', 
+                  color: '#999', 
+                  marginTop: '5px'
+                }}>
                   {message.timestamp.toLocaleTimeString()}
                 </div>
               </div>
@@ -257,11 +299,22 @@ function App() {
         )}
         {loading && (
           <div className="message assistant">
-            <div className="avatar">AI</div>
+            <div className="avatar">🤖</div>
             <div className="content">
-              正在思考...
+              <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                <div>正在思考...</div>
+                <div className="loading-spinner" style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid #f3f3f3',
+                  borderTop: '2px solid #3498db',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+              </div>
               <div style={{fontSize: '12px', color: '#666', marginTop: '5px'}}>
                 使用 {useGraphQL ? 'GraphQL' : 'REST API'} 模式
+                {currentEndpoint && ` (${currentEndpoint})`}
               </div>
             </div>
           </div>
@@ -277,14 +330,31 @@ function App() {
           onKeyPress={handleKeyPress}
           placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
           disabled={loading}
+          style={{
+            resize: 'vertical',
+            minHeight: '40px',
+            maxHeight: '120px'
+          }}
         />
         <button 
           onClick={sendMessage} 
           disabled={!input.trim() || loading}
+          style={{
+            opacity: (!input.trim() || loading) ? 0.6 : 1,
+            cursor: (!input.trim() || loading) ? 'not-allowed' : 'pointer'
+          }}
         >
-          发送
+          {loading ? '发送中...' : '发送'}
         </button>
       </div>
+
+      {/* CSS动画 */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
