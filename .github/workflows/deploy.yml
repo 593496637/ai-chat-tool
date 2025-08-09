@@ -81,6 +81,6 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ai-chat-frontend-agp
+          projectName: ai-chat-frontend
           directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
