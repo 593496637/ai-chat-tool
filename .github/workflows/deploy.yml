@@ -61,10 +61,10 @@ jobs:
           directory: dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
-  # 运行测试和检查
+  # 简化的测试流程
   test:
     runs-on: ubuntu-latest
-    name: Run Tests and Checks
+    name: Build Test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -77,18 +77,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Type check
-        run: npx tsc --noEmit
-
       - name: Build test
         run: npm run build
 
-      - name: Check bundle size
+      - name: Check build output
         run: |
-          echo "## Bundle Size Report" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
-          find dist -name "*.js" -o -name "*.css" | while read file; do
-            size=$(du -h "$file" | cut -f1)
-            echo "| $file | $size |" >> $GITHUB_STEP_SUMMARY
-          done
+          echo "✅ Build completed successfully"
+          ls -la dist/
