@@ -31,6 +31,55 @@ const typeDefs = `
   }
 `;
 
+// 调用DeepSeek API的函数
+async function callDeepSeekAPI(messages, env) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+
+  try {
+    console.log('Calling DeepSeek API...');
+    const startTime = Date.now();
+    
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: messages,
+        max_tokens: 1000,
+        temperature: 0.7,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const duration = Date.now() - startTime;
+    console.log(`DeepSeek API response time: ${duration}ms`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('DeepSeek API Error:', response.status, errorText);
+      throw new Error(`DeepSeek API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('DeepSeek API success');
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('DeepSeek API timeout after 15 seconds');
+      throw new Error('请求超时，请稍后再试');
+    }
+    console.error('DeepSeek API Error:', error);
+    throw error;
+  }
+}
+
 // 简单的GraphQL解析器
 const resolvers = {
   Query: {
@@ -39,32 +88,7 @@ const resolvers = {
   Mutation: {
     chat: async (parent, args, context) => {
       const { messages } = args.input;
-      
-      try {
-        // 调用DeepSeek API
-        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${context.env.DEEPSEEK_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: messages,
-            max_tokens: 1000,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`DeepSeek API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data;
-      } catch (error) {
-        console.error('Error calling DeepSeek API:', error);
-        throw new Error('Failed to get AI response');
-      }
+      return await callDeepSeekAPI(messages, context.env);
     }
   }
 };
@@ -89,6 +113,7 @@ async function executeGraphQL(query, variables, context) {
 
 export default {
   async fetch(request, env) {
+    const startTime = Date.now();
     const url = new URL(request.url);
     
     // 处理CORS预检请求
@@ -104,80 +129,71 @@ export default {
       });
     }
 
-    // GraphQL端点
-    if (url.pathname === '/api/graphql') {
-      if (request.method !== 'POST') {
-        return new Response('Method not allowed', { status: 405 });
-      }
+    try {
+      // GraphQL端点
+      if (url.pathname === '/api/graphql') {
+        if (request.method !== 'POST') {
+          return new Response('Method not allowed', { status: 405 });
+        }
 
-      try {
+        console.log('Processing GraphQL request...');
         const body = await request.json();
         const { query, variables } = body;
         
         const context = { env };
         const result = await executeGraphQL(query, variables, context);
         
+        const duration = Date.now() - startTime;
+        console.log(`Total GraphQL request time: ${duration}ms`);
+        
         return new Response(JSON.stringify({ data: result }), {
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-          },
-        });
-      } catch (error) {
-        return new Response(JSON.stringify({ 
-          errors: [{ message: error.message }] 
-        }), {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'X-Response-Time': `${duration}ms`,
           },
         });
       }
-    }
 
-    // 保持原有的REST API兼容性
-    if (url.pathname === '/api/chat') {
-      if (request.method !== 'POST') {
-        return new Response('Method not allowed', { status: 405 });
-      }
+      // 保持原有的REST API兼容性
+      if (url.pathname === '/api/chat') {
+        if (request.method !== 'POST') {
+          return new Response('Method not allowed', { status: 405 });
+        }
 
-      try {
+        console.log('Processing REST request...');
         const body = await request.json();
-        
-        // 调用DeepSeek API
-        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'deepseek-chat',
-            messages: body.messages,
-            max_tokens: 1000,
-          }),
-        });
+        const data = await callDeepSeekAPI(body.messages, env);
 
-        const data = await response.json();
+        const duration = Date.now() - startTime;
+        console.log(`Total REST request time: ${duration}ms`);
 
         return new Response(JSON.stringify(data), {
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-          },
-        });
-      } catch (error) {
-        return new Response(JSON.stringify({ error: '服务器错误' }), {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'X-Response-Time': `${duration}ms`,
           },
         });
       }
-    }
 
-    return new Response('Not Found', { status: 404 });
+      return new Response('Not Found', { status: 404 });
+      
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error('Worker Error:', error);
+      
+      return new Response(JSON.stringify({ 
+        error: error.message || '服务器内部错误，请稍后再试',
+        details: '请检查网络连接或稍后重试'
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'X-Response-Time': `${duration}ms`,
+        },
+      });
+    }
   },
 };
