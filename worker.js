@@ -1,68 +1,12 @@
-// Cloudflare Workers - GraphQL API for DeepSeek Chat
-
-// GraphQL Schema Definition
-const typeDefs = `
-  type Query {
-    hello: String
-  }
-
-  type Mutation {
-    sendMessage(input: ChatInput!): ChatResponse!
-  }
-
-  input ChatInput {
-    messages: [MessageInput!]!
-  }
-
-  input MessageInput {
-    role: String!
-    content: String!
-  }
-
-  type ChatResponse {
-    choices: [Choice!]!
-    usage: Usage
-    model: String
-  }
-
-  type Choice {
-    message: Message!
-    index: Int!
-    finish_reason: String
-  }
-
-  type Message {
-    role: String!
-    content: String!
-  }
-
-  type Usage {
-    prompt_tokens: Int
-    completion_tokens: Int
-    total_tokens: Int
-  }
-`;
-
-// GraphQL Resolvers
-const resolvers = {
-  Query: {
-    hello: () => 'Hello from GraphQL API!'
-  },
-  Mutation: {
-    sendMessage: async (parent, { input }, { env }) => {
-      const data = await callDeepSeekAPI(input.messages, env);
-      return data;
-    }
-  }
-};
+// Cloudflare Workers - AI聊天API (GraphQL + REST)
 
 // DeepSeek API调用函数
 async function callDeepSeekAPI(messages, env) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-    console.log('Calling DeepSeek API via GraphQL...');
+    console.log('Calling DeepSeek API...');
     const startTime = Date.now();
     
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -105,42 +49,12 @@ async function callDeepSeekAPI(messages, env) {
   }
 }
 
-// 简单的 GraphQL 执行器
-async function executeGraphQL(query, variables, context) {
-  try {
-    // 解析查询类型
-    if (query.includes('sendMessage')) {
-      // 这是一个 mutation
-      const result = await resolvers.Mutation.sendMessage(null, variables, context);
-      return {
-        data: {
-          sendMessage: result
-        }
-      };
-    } else if (query.includes('hello')) {
-      // 这是一个 query
-      const result = resolvers.Query.hello();
-      return {
-        data: {
-          hello: result
-        }
-      };
-    } else {
-      throw new Error('Unknown operation');
-    }
-  } catch (error) {
-    return {
-      errors: [{
-        message: error.message
-      }]
-    };
-  }
-}
-
 export default {
   async fetch(request, env) {
     const startTime = Date.now();
     const url = new URL(request.url);
+    
+    console.log(`${request.method} ${url.pathname}`);
     
     // 处理CORS预检请求
     if (request.method === 'OPTIONS') {
@@ -159,61 +73,110 @@ export default {
       // GraphQL端点
       if (url.pathname === '/graphql') {
         if (request.method !== 'POST') {
-          return new Response('Method not allowed', { status: 405 });
+          console.log('GraphQL endpoint only accepts POST');
+          return new Response('Method not allowed', { 
+            status: 405,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Allow': 'POST, OPTIONS'
+            }
+          });
         }
 
         console.log('Processing GraphQL request...');
         const body = await request.json();
         
-        // 验证GraphQL请求格式
         if (!body.query) {
           return new Response(JSON.stringify({ 
             errors: [{ message: 'Query is required' }] 
           }), {
             status: 400,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            },
           });
         }
 
-        const result = await executeGraphQL(
-          body.query, 
-          body.variables || {}, 
-          { env }
-        );
+        // 处理sendMessage mutation
+        if (body.query.includes('sendMessage')) {
+          const variables = body.variables || {};
+          const messages = variables.input?.messages || [];
+          
+          console.log('Executing sendMessage mutation');
+          const data = await callDeepSeekAPI(messages, env);
+          
+          const result = {
+            data: {
+              sendMessage: data
+            }
+          };
 
-        const duration = Date.now() - startTime;
-        console.log(`Total GraphQL request time: ${duration}ms`);
+          const duration = Date.now() - startTime;
+          console.log(`GraphQL request completed in ${duration}ms`);
 
-        return new Response(JSON.stringify(result), {
-          headers: {
+          return new Response(JSON.stringify(result), {
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'X-Response-Time': `${duration}ms`,
+            },
+          });
+        }
+
+        // 处理hello query
+        if (body.query.includes('hello')) {
+          console.log('Executing hello query');
+          return new Response(JSON.stringify({
+            data: { hello: 'Hello from GraphQL API!' }
+          }), {
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            },
+          });
+        }
+
+        return new Response(JSON.stringify({
+          errors: [{ message: 'Unknown GraphQL operation' }]
+        }), {
+          status: 400,
+          headers: { 
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'X-Response-Time': `${duration}ms`,
+            'Access-Control-Allow-Origin': '*'
           },
         });
       }
 
-      // REST API端点 (保持兼容性)
+      // REST API端点
       if (url.pathname === '/api/chat') {
         if (request.method !== 'POST') {
-          return new Response('Method not allowed', { status: 405 });
+          return new Response('Method not allowed', { 
+            status: 405,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Allow': 'POST, OPTIONS'
+            }
+          });
         }
 
         console.log('Processing REST request...');
         const body = await request.json();
         
-        // 验证请求格式
         if (!body.messages || !Array.isArray(body.messages)) {
           return new Response(JSON.stringify({ error: 'Invalid request format' }), {
             status: 400,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            },
           });
         }
 
         const data = await callDeepSeekAPI(body.messages, env);
 
         const duration = Date.now() - startTime;
-        console.log(`Total REST request time: ${duration}ms`);
+        console.log(`REST request completed in ${duration}ms`);
 
         return new Response(JSON.stringify(data), {
           headers: {
@@ -224,7 +187,14 @@ export default {
         });
       }
 
-      return new Response('Not Found', { status: 404 });
+      // 其他路径返回404
+      console.log(`Unknown path: ${url.pathname}`);
+      return new Response(`Not Found: ${url.pathname}`, { 
+        status: 404,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
       
     } catch (error) {
       const duration = Date.now() - startTime;
