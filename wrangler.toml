@@ -6,12 +6,9 @@ compatibility_date = "2024-01-01"
 [env.production]
 vars = { ENVIRONMENT = "production" }
 
-# 路由配置 - 指向你的域名
+# 路由配置 - 指向你的域名，修复GraphQL路由
 [[env.production.routes]]
-pattern = "bestvip.life/api/*"
-
-[[env.production.routes]]
-pattern = "bestvip.life/graphql"
+pattern = "bestvip.life/*"
 
 # 开发环境
 [env.development]
