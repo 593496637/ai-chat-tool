@@ -25,9 +25,13 @@ function App() {
         }
       });
 
+      console.log('GraphQL result:', result);
+
       const assistantMessage: Message = {
         id: Date.now() + 1,
-        content: result.chat.choices[0]?.message?.content || '抱歉，我无法回答这个问题。',
+        content: result.chat?.choices?.[0]?.message?.content || 
+                result.choices?.[0]?.message?.content || 
+                '抱歉，我无法回答这个问题。',
         role: 'assistant'
       };
 
@@ -59,10 +63,11 @@ function App() {
       }
 
       const data = await response.json();
+      console.log('REST API result:', data);
       
       const assistantMessage: Message = {
         id: Date.now() + 1,
-        content: data.choices[0]?.message?.content || '抱歉，我无法回答这个问题。',
+        content: data.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。',
         role: 'assistant'
       };
 
@@ -96,7 +101,7 @@ function App() {
       console.error('Error:', error);
       const errorMessage: Message = {
         id: Date.now() + 1,
-        content: '抱歉，发生了错误，请稍后再试。',
+        content: '抱歉，发生了错误，请稍后再试。错误详情请查看控制台。',
         role: 'assistant'
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -108,8 +113,10 @@ function App() {
   const testGraphQL = async () => {
     try {
       const result = await graphqlClient.query(HELLO_QUERY);
-      alert(`GraphQL测试成功: ${result.hello}`);
+      console.log('Hello query result:', result);
+      alert(`GraphQL测试成功: ${result.hello || '连接正常'}`);
     } catch (error) {
+      console.error('GraphQL test error:', error);
       alert(`GraphQL测试失败: ${error}`);
     }
   };
