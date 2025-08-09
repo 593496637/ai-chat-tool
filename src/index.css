@@ -68,12 +68,28 @@ body {
   opacity: 0.9;
   margin: 2px 0 0 0;
   font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.connection-status {
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .header-controls {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* 开关样式 */
@@ -597,6 +613,15 @@ input:checked + .slider:before {
     justify-content: center;
   }
   
+  .subtitle {
+    justify-content: center;
+    text-align: center;
+  }
+  
+  .header-controls {
+    justify-content: center;
+  }
+  
   .features {
     flex-direction: column;
     gap: 10px;
@@ -618,6 +643,11 @@ input:checked + .slider:before {
   
   .input-wrapper {
     border-radius: 20px;
+  }
+
+  .connection-status {
+    font-size: 0.7rem;
+    padding: 1px 6px;
   }
 }
 
