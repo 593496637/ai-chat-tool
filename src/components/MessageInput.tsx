@@ -1,5 +1,5 @@
 // src/components/MessageInput.tsx
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useChat } from '../hooks/useChat';
 
 const MessageInput: React.FC = () => {
@@ -44,7 +44,7 @@ const MessageInput: React.FC = () => {
     await sendMessage(messageContent);
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = () => {
     // 延迟调整高度，确保粘贴内容已插入
     setTimeout(adjustTextareaHeight, 0);
   };
@@ -99,4 +99,4 @@ const MessageInput: React.FC = () => {
   );
 };
 
-export default React.memo(MessageInput);
+export default MessageInput;
