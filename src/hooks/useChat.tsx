@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
 import { Message, AppConfig, ConnectionStatus } from '../types';
-import { sendChatMessage, sendChatMessageRest, testGraphQLConnection, getHealthStatus } from '../services/graphqlClient';
+import { sendChatMessage, testGraphQLConnection, getHealthStatus } from '../services/graphqlClient';
 
 interface ChatState {
   messages: Message[];
@@ -97,8 +97,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'SET_ERROR', payload: '' });
 
-    console.log('开始发送消息，当前配置:', {
-      useGraphQL: state.config.useGraphQL,
+    console.log('开始发送消息，GraphQL Only模式:', {
       messageCount: state.messages.length + 1
     });
 
@@ -109,42 +108,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         content: msg.content,
       }));
 
-      let responseContent: string;
-      let usedGraphQL = false;
-
-      // 优先尝试 GraphQL
-      if (state.config.useGraphQL) {
-        try {
-          console.log('尝试使用GraphQL发送消息...');
-          const response = await sendChatMessage(graphqlMessages);
-          responseContent = response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
-          usedGraphQL = true;
-          console.log('GraphQL消息发送成功');
-        } catch (error) {
-          console.warn('GraphQL失败，尝试REST备用方案:', error);
-          
-          try {
-            const restResponse = await sendChatMessageRest(graphqlMessages);
-            responseContent = restResponse.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
-            console.log('REST备用方案成功');
-            console.log('本次使用REST，下次仍会尝试GraphQL');
-          } catch (restError) {
-            console.error('REST备用方案也失败:', restError);
-            const errorMsg = error instanceof Error ? error.message : '未知错误';
-            throw new Error(`GraphQL和REST都失败: ${errorMsg}`);
-          }
-        }
-      } else {
-        console.log('使用REST API发送消息...');
-        try {
-          const restResponse = await sendChatMessageRest(graphqlMessages);
-          responseContent = restResponse.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
-          console.log('REST API消息发送成功');
-        } catch (restError) {
-          console.error('REST API失败:', restError);
-          throw restError;
-        }
-      }
+      // 强制只使用 GraphQL
+      console.log('使用GraphQL发送消息...');
+      const response = await sendChatMessage(graphqlMessages);
+      const responseContent = response.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
+      console.log('GraphQL消息发送成功');
 
       const assistantMessage: Message = {
         id: Date.now() + 1,
@@ -155,8 +123,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       dispatch({ type: 'ADD_MESSAGE', payload: assistantMessage });
       
-      console.log('消息发送完成', {
-        usedGraphQL,
+      console.log('GraphQL消息发送完成', {
         responseLength: responseContent.length
       });
 
@@ -176,7 +143,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  }, [state.messages, state.loading, state.config.useGraphQL]);
+  }, [state.messages, state.loading]);
 
   const clearChat = useCallback(() => {
     console.log('清空聊天记录');
