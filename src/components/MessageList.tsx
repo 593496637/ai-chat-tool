@@ -1,6 +1,6 @@
 // src/components/MessageList.tsx
 import React, { useEffect, useRef } from 'react';
-import { useChat } from '@/hooks/useChat';
+import { useChat } from '../hooks/useChat';
 import ChatMessage from './ChatMessage';
 import LoadingMessage from './LoadingMessage';
 import WelcomeMessage from './WelcomeMessage';
