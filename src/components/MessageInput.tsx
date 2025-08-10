@@ -23,7 +23,7 @@ const MessageInput: React.FC = () => {
     adjustTextareaHeight();
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -56,7 +56,7 @@ const MessageInput: React.FC = () => {
           ref={textareaRef}
           value={input}
           onChange={handleInputChange}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
           disabled={state.loading}
