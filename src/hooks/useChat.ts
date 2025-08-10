@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback } from 'react';
 import { Message, AppConfig, ConnectionStatus } from '../types';
 import { sendChatMessage, sendChatMessageRest, testGraphQLConnection, getHealthStatus } from '../services/graphqlClient';
 
@@ -228,7 +228,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     checkConnection,
   };
 
-  return React.createElement(ChatContext.Provider, { value }, children);
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }
 
 export function useChat() {
