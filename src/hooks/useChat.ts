@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { Message, AppConfig, ConnectionStatus } from '@/types';
-import { sendChatMessage, testGraphQLConnection, getHealthStatus } from '@/services/graphqlClient';
+import { Message, AppConfig, ConnectionStatus } from '../types';
+import { sendChatMessage, testGraphQLConnection, getHealthStatus } from '../services/graphqlClient';
 
 interface ChatState {
   messages: Message[];
