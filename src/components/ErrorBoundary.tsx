@@ -42,7 +42,14 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      const isDevelopment = import.meta.env?.DEV || false;
+      // 使用更安全的方式检测开发模式
+      const isDevelopment = (() => {
+        try {
+          return import.meta.env.DEV;
+        } catch {
+          return false;
+        }
+      })();
       
       return (
         <div className="error-boundary">
