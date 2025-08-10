@@ -1,4 +1,4 @@
-// Cloudflare Workers - AI聊天API (GraphQL + REST) - 修复版
+// Cloudflare Workers - AI聊天API (GraphQL + REST) - 最终修复版
 
 // DeepSeek API调用函数
 async function callDeepSeekAPI(messages, env) {
@@ -54,29 +54,35 @@ export default {
     const startTime = Date.now();
     const url = new URL(request.url);
     
-    console.log(`${request.method} ${url.pathname}`);
+    console.log(`${request.method} ${url.pathname} - User-Agent: ${request.headers.get('User-Agent')?.substring(0, 50)}...`);
     
     // 处理CORS预检请求
     if (request.method === 'OPTIONS') {
+      console.log('Handling CORS preflight request');
       return new Response(null, {
         status: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
           'Access-Control-Max-Age': '86400',
         },
       });
     }
 
     try {
-      // GraphQL端点 - 支持多种路径
-      if (url.pathname === '/graphql' || url.pathname === '/api/graphql') {
+      // 统一的GraphQL端点处理 - 只使用 /graphql
+      if (url.pathname === '/graphql') {
         if (request.method !== 'POST') {
-          console.log('GraphQL endpoint only accepts POST');
-          return new Response('Method not allowed', { 
+          console.log(`GraphQL endpoint received ${request.method}, returning 405`);
+          return new Response(JSON.stringify({
+            error: 'Method not allowed',
+            message: 'GraphQL endpoint only accepts POST requests',
+            allowed_methods: ['POST', 'OPTIONS']
+          }), { 
             status: 405,
             headers: {
+              'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
               'Allow': 'POST, OPTIONS'
             }
@@ -84,9 +90,24 @@ export default {
         }
 
         console.log('Processing GraphQL request...');
-        const body = await request.json();
+        let body;
+        try {
+          body = await request.json();
+        } catch (error) {
+          console.error('Invalid JSON in request body:', error);
+          return new Response(JSON.stringify({ 
+            errors: [{ message: 'Invalid JSON in request body' }] 
+          }), {
+            status: 400,
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            },
+          });
+        }
         
         if (!body.query) {
+          console.log('Missing query in GraphQL request');
           return new Response(JSON.stringify({ 
             errors: [{ message: 'Query is required' }] 
           }), {
@@ -102,12 +123,39 @@ export default {
         const queryString = body.query.replace(/\s+/g, ' ').trim().toLowerCase();
         console.log('Normalized query:', queryString);
 
-        // 处理sendMessage mutation (支持SendMessage和sendMessage两种写法)
-        if (queryString.includes('sendmessage') || queryString.includes('mutation')) {
+        // 处理hello query - 简单的连接测试
+        if (queryString.includes('hello')) {
+          console.log('Executing hello query');
+          const duration = Date.now() - startTime;
+          return new Response(JSON.stringify({
+            data: { hello: 'Hello from GraphQL API!' }
+          }), {
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+              'X-Response-Time': `${duration}ms`,
+            },
+          });
+        }
+
+        // 处理sendMessage mutation
+        if (queryString.includes('sendmessage') && queryString.includes('mutation')) {
           const variables = body.variables || {};
           const messages = variables.input?.messages || [];
           
-          console.log('Executing sendMessage mutation');
+          if (!Array.isArray(messages) || messages.length === 0) {
+            return new Response(JSON.stringify({
+              errors: [{ message: 'Messages array is required and cannot be empty' }]
+            }), {
+              status: 400,
+              headers: { 
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+              },
+            });
+          }
+          
+          console.log('Executing sendMessage mutation with', messages.length, 'messages');
           const data = await callDeepSeekAPI(messages, env);
           
           const result = {
@@ -117,7 +165,7 @@ export default {
           };
 
           const duration = Date.now() - startTime;
-          console.log(`GraphQL request completed in ${duration}ms`);
+          console.log(`GraphQL sendMessage completed in ${duration}ms`);
 
           return new Response(JSON.stringify(result), {
             headers: {
@@ -128,21 +176,13 @@ export default {
           });
         }
 
-        // 处理hello query
-        if (queryString.includes('hello') || queryString.includes('query')) {
-          console.log('Executing hello query');
-          return new Response(JSON.stringify({
-            data: { hello: 'Hello from GraphQL API!' }
-          }), {
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          });
-        }
-
+        // 未知的GraphQL操作
+        console.log('Unknown GraphQL operation:', queryString);
         return new Response(JSON.stringify({
-          errors: [{ message: 'Unknown GraphQL operation' }]
+          errors: [{ 
+            message: 'Unknown GraphQL operation',
+            received_query: body.query.substring(0, 100) + '...'
+          }]
         }), {
           status: 400,
           headers: { 
@@ -155,20 +195,28 @@ export default {
       // REST API端点
       if (url.pathname === '/api/chat') {
         if (request.method !== 'POST') {
-          return new Response('Method not allowed', { 
+          return new Response(JSON.stringify({
+            error: 'Method not allowed',
+            message: 'Chat API only accepts POST requests',
+            allowed_methods: ['POST', 'OPTIONS']
+          }), { 
             status: 405,
             headers: {
+              'Content-Type': 'application/json',
               'Access-Control-Allow-Origin': '*',
               'Allow': 'POST, OPTIONS'
             }
           });
         }
 
-        console.log('Processing REST request...');
+        console.log('Processing REST chat request...');
         const body = await request.json();
         
         if (!body.messages || !Array.isArray(body.messages)) {
-          return new Response(JSON.stringify({ error: 'Invalid request format' }), {
+          return new Response(JSON.stringify({ 
+            error: 'Invalid request format',
+            message: 'Messages array is required'
+          }), {
             status: 400,
             headers: { 
               'Content-Type': 'application/json',
@@ -180,7 +228,7 @@ export default {
         const data = await callDeepSeekAPI(body.messages, env);
 
         const duration = Date.now() - startTime;
-        console.log(`REST request completed in ${duration}ms`);
+        console.log(`REST chat completed in ${duration}ms`);
 
         return new Response(JSON.stringify(data), {
           headers: {
@@ -192,12 +240,34 @@ export default {
       }
 
       // 健康检查端点
-      if (url.pathname === '/health' || url.pathname === '/') {
+      if (url.pathname === '/health') {
+        const duration = Date.now() - startTime;
         return new Response(JSON.stringify({
           status: 'ok',
+          timestamp: new Date().toISOString(),
           endpoints: {
             graphql: '/graphql',
-            rest: '/api/chat',
+            chat: '/api/chat',
+            health: '/health'
+          },
+          response_time: `${duration}ms`
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'X-Response-Time': `${duration}ms`,
+          },
+        });
+      }
+
+      // 根路径重定向到健康检查
+      if (url.pathname === '/') {
+        return new Response(JSON.stringify({
+          message: 'AI Chat Tool API',
+          status: 'running',
+          endpoints: {
+            graphql: '/graphql',
+            chat: '/api/chat', 
             health: '/health'
           }
         }), {
@@ -209,11 +279,12 @@ export default {
       }
 
       // 其他路径返回404
-      console.log(`Unknown path: ${url.pathname}`);
+      console.log(`404 - Unknown path: ${url.pathname}`);
       return new Response(JSON.stringify({
         error: 'Not Found',
         path: url.pathname,
-        available_endpoints: ['/graphql', '/api/graphql', '/api/chat', '/health']
+        message: `Path ${url.pathname} not found`,
+        available_endpoints: ['/graphql', '/api/chat', '/health']
       }), { 
         status: 404,
         headers: {
@@ -228,7 +299,8 @@ export default {
       
       return new Response(JSON.stringify({ 
         errors: [{ 
-          message: error.message || '服务器内部错误，请稍后再试' 
+          message: error.message || '服务器内部错误，请稍后再试',
+          type: 'internal_error'
         }]
       }), {
         status: 500,
