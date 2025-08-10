@@ -1,4 +1,4 @@
-// GraphQL 客户端和查询定义 - 简化版，修复连接问题
+// GraphQL 客户端和查询定义 - 修复版，使用正确的API端点
 
 export interface Message {
   role: string;
@@ -51,13 +51,46 @@ export const HELLO_QUERY = `
   }
 `;
 
+// API配置 - 根据环境自动选择端点
+const getApiBaseUrl = (): string => {
+  // 如果在生产环境且有自定义域名，使用bestvip.life
+  if (window.location.hostname === 'bestvip.life') {
+    return 'https://bestvip.life';
+  }
+  
+  // 如果在Pages环境，使用Workers的直接URL
+  if (window.location.hostname.includes('pages.dev')) {
+    // 使用您的Workers直接域名
+    return 'https://ai-chat-api.593496637.workers.dev';
+  }
+  
+  // 本地开发
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:8787'; // Wrangler dev server
+  }
+  
+  // 默认回退到bestvip.life
+  return 'https://bestvip.life';
+};
+
 // 简化的连接管理器
 class SimpleGraphQLManager {
   private static instance: SimpleGraphQLManager;
   private isInitialized = false;
   private isConnected = false;
-  private endpoint = '/graphql';
+  private apiBaseUrl: string;
+  private graphqlEndpoint: string;
   private initPromise: Promise<boolean> | null = null;
+
+  constructor() {
+    this.apiBaseUrl = getApiBaseUrl();
+    this.graphqlEndpoint = `${this.apiBaseUrl}/graphql`;
+    console.log('GraphQL Manager initialized with:', {
+      apiBaseUrl: this.apiBaseUrl,
+      graphqlEndpoint: this.graphqlEndpoint,
+      currentHost: window.location.hostname
+    });
+  }
 
   static getInstance(): SimpleGraphQLManager {
     if (!SimpleGraphQLManager.instance) {
@@ -91,9 +124,9 @@ class SimpleGraphQLManager {
 
   private async doInitialize(): Promise<boolean> {
     try {
-      console.log('Testing GraphQL connection to', this.endpoint);
+      console.log('Testing GraphQL connection to', this.graphqlEndpoint);
       
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(this.graphqlEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,10 +164,11 @@ class SimpleGraphQLManager {
     }
   }
 
-  getStatus(): { endpoint: string; connected: boolean } {
+  getStatus(): { endpoint: string; connected: boolean; apiBaseUrl: string } {
     return {
-      endpoint: this.endpoint,
-      connected: this.isConnected
+      endpoint: this.graphqlEndpoint,
+      connected: this.isConnected,
+      apiBaseUrl: this.apiBaseUrl
     };
   }
 
@@ -143,6 +177,9 @@ class SimpleGraphQLManager {
     this.isInitialized = false;
     this.isConnected = false;
     this.initPromise = null;
+    // 重新获取API地址（可能域名发生了变化）
+    this.apiBaseUrl = getApiBaseUrl();
+    this.graphqlEndpoint = `${this.apiBaseUrl}/graphql`;
     return await this.initialize();
   }
 }
@@ -157,9 +194,10 @@ export class GraphQLClient {
     variables: Record<string, any> = {}
   ): Promise<{ data?: T; errors?: Array<{ message: string }> }> {
     try {
-      console.log('GraphQL request:', { query: query.substring(0, 50) + '...', variables });
+      const endpoint = manager.getStatus().endpoint;
+      console.log('GraphQL request to:', endpoint, { query: query.substring(0, 50) + '...', variables });
       
-      const response = await fetch('/graphql', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,8 +274,11 @@ export async function sendChatMessage(messages: Message[]): Promise<ChatResponse
 // 工具函数：获取健康状态
 export async function getHealthStatus(): Promise<any> {
   try {
-    console.log('Checking health status...');
-    const response = await fetch('/health');
+    const apiBaseUrl = getApiBaseUrl();
+    const healthUrl = `${apiBaseUrl}/health`;
+    console.log('Checking health status at:', healthUrl);
+    
+    const response = await fetch(healthUrl);
     console.log('Health response status:', response.status);
     
     if (response.ok) {
@@ -264,10 +305,21 @@ export async function refreshGraphQLConnection(): Promise<boolean> {
 }
 
 // 工具函数：获取状态
-export function getGraphQLStatus(): { endpoint: string; status: string } {
+export function getGraphQLStatus(): { endpoint: string; status: string; apiBaseUrl: string } {
   const status = manager.getStatus();
   return {
     endpoint: status.endpoint,
-    status: status.connected ? 'connected' : 'failed'
+    status: status.connected ? 'connected' : 'failed',
+    apiBaseUrl: status.apiBaseUrl
+  };
+}
+
+// 工具函数：获取当前API配置（用于调试）
+export function getApiConfig() {
+  return {
+    currentHost: window.location.hostname,
+    apiBaseUrl: getApiBaseUrl(),
+    graphqlEndpoint: `${getApiBaseUrl()}/graphql`,
+    healthEndpoint: `${getApiBaseUrl()}/health`
   };
 }
