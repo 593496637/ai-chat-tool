@@ -7,7 +7,7 @@ import WelcomeMessage from './WelcomeMessage';
 
 const MessageList: React.FC = () => {
   const { state } = useChat();
-  const { messages, loading, config, connectionStatus } = state;
+  const { messages, loading, config } = state;
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 自动滚动到底部
@@ -22,10 +22,7 @@ const MessageList: React.FC = () => {
     <div className="messages-container">
       <div className="messages">
         {messages.length === 0 ? (
-          <WelcomeMessage 
-            useGraphQL={config.useGraphQL}
-            connectionStatus={connectionStatus.status}
-          />
+          <WelcomeMessage />
         ) : (
           messages.map((message) => (
             <ChatMessage

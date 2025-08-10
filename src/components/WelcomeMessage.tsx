@@ -1,15 +1,12 @@
 // src/components/WelcomeMessage.tsx
 import React from 'react';
+import { useChat } from '../hooks/useChat';
 
-interface WelcomeMessageProps {
-  useGraphQL: boolean;
-  connectionStatus: 'unknown' | 'connected' | 'failed';
-}
-
-const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ 
-  useGraphQL, 
-  connectionStatus 
-}) => {
+const WelcomeMessage: React.FC = () => {
+  const { state } = useChat();
+  
+  const useGraphQL = state.config.useGraphQL;
+  const connectionStatus = state.connectionStatus.status;
   const getStatusIcon = () => {
     switch (connectionStatus) {
       case 'connected': return '🟢';
