@@ -1,4 +1,4 @@
-// GraphQL 客户端和查询定义 - 修复版，使用正确的API端点
+// GraphQL 客户端 - 快速修复版，使用 /api/graphql 路径
 
 export interface Message {
   role: string;
@@ -51,26 +51,25 @@ export const HELLO_QUERY = `
   }
 `;
 
-// API配置 - 根据环境自动选择端点
+// API配置 - 使用已经工作的 /api 路径
 const getApiBaseUrl = (): string => {
-  // 如果在生产环境且有自定义域名，使用bestvip.life
+  // 如果在生产环境且有自定义域名，使用bestvip.life的api路径
   if (window.location.hostname === 'bestvip.life') {
-    return 'https://bestvip.life';
+    return 'https://bestvip.life/api';
   }
   
   // 如果在Pages环境，使用Workers的直接URL
   if (window.location.hostname.includes('pages.dev')) {
-    // 使用您的Workers直接域名
     return 'https://ai-chat-api.593496637.workers.dev';
   }
   
   // 本地开发
   if (window.location.hostname === 'localhost') {
-    return 'http://localhost:8787'; // Wrangler dev server
+    return 'http://localhost:8787';
   }
   
-  // 默认回退到bestvip.life
-  return 'https://bestvip.life';
+  // 默认回退
+  return 'https://bestvip.life/api';
 };
 
 // 简化的连接管理器
@@ -100,13 +99,11 @@ class SimpleGraphQLManager {
   }
 
   async initialize(): Promise<boolean> {
-    // 如果已经初始化过，直接返回状态
     if (this.isInitialized) {
       console.log('GraphQL already initialized, connection status:', this.isConnected);
       return this.isConnected;
     }
 
-    // 如果正在初始化，等待结果
     if (this.initPromise) {
       console.log('GraphQL initialization in progress, waiting...');
       return await this.initPromise;
@@ -177,7 +174,6 @@ class SimpleGraphQLManager {
     this.isInitialized = false;
     this.isConnected = false;
     this.initPromise = null;
-    // 重新获取API地址（可能域名发生了变化）
     this.apiBaseUrl = getApiBaseUrl();
     this.graphqlEndpoint = `${this.apiBaseUrl}/graphql`;
     return await this.initialize();
