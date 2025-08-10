@@ -5,8 +5,8 @@ import {
   sendChatMessage, 
   testGraphQLConnection, 
   getHealthStatus, 
-  refreshGraphQLEndpoint,
-  getCurrentValidEndpoint,
+  refreshGraphQLConnection,
+  getGraphQLStatus,
   Message as GraphQLMessage 
 } from './graphql';
 
@@ -25,8 +25,9 @@ function App() {
   const [useGraphQL, setUseGraphQL] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'failed'>('unknown');
   const [lastError, setLastError] = useState<string>('');
-  const [currentEndpoint, setCurrentEndpoint] = useState<string>('');
+  const [debugInfo, setDebugInfo] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const initializationRef = useRef<boolean>(false); // 防止重复初始化
 
   // 自动滚动到底部
   const scrollToBottom = () => {
@@ -37,12 +38,22 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
-  // 检查连接状态
+  // 检查连接状态 - 简化版本，避免重复请求
   const checkConnection = async () => {
+    if (initializationRef.current) {
+      console.log('Connection check already in progress, skipping...');
+      return;
+    }
+
+    initializationRef.current = true;
     setConnectionStatus('unknown');
     setLastError('');
+    setDebugInfo('正在初始化连接...');
     
     try {
+      console.log('Starting connection check...');
+      
+      // 并行检查健康状态和GraphQL连接
       const [health, graphqlTest] = await Promise.all([
         getHealthStatus(),
         testGraphQLConnection()
@@ -51,38 +62,55 @@ function App() {
       if (health && graphqlTest) {
         setConnectionStatus('connected');
         setLastError('');
-        // 获取当前使用的端点
-        const endpoint = getCurrentValidEndpoint();
-        if (endpoint) {
-          setCurrentEndpoint(endpoint);
-        }
+        const status = getGraphQLStatus();
+        setDebugInfo(`连接成功 - 端点: ${status.endpoint}`);
+        console.log('Connection check successful');
       } else {
         setConnectionStatus('failed');
-        setLastError('无法连接到GraphQL服务');
+        setLastError('无法连接到服务');
+        setDebugInfo(`连接失败 - Health: ${!!health}, GraphQL: ${graphqlTest}`);
+        console.log('Connection check failed');
       }
     } catch (error) {
       setConnectionStatus('failed');
-      setLastError(error instanceof Error ? error.message : '连接测试失败');
+      const errorMsg = error instanceof Error ? error.message : '连接测试失败';
+      setLastError(errorMsg);
+      setDebugInfo(`连接错误: ${errorMsg}`);
+      console.error('Connection check error:', error);
+    } finally {
+      initializationRef.current = false;
     }
   };
 
-  // 组件加载时测试连接
+  // 组件加载时测试连接 - 只执行一次
   useEffect(() => {
     checkConnection();
-  }, []);
+  }, []); // 空依赖数组，只在组件挂载时执行一次
 
-  // 刷新端点
-  const handleRefreshEndpoint = async () => {
+  // 手动刷新连接
+  const handleRefreshConnection = async () => {
+    setDebugInfo('刷新连接中...');
     try {
-      const newEndpoint = await refreshGraphQLEndpoint();
-      setCurrentEndpoint(newEndpoint);
-      await checkConnection();
+      const success = await refreshGraphQLConnection();
+      if (success) {
+        setConnectionStatus('connected');
+        setLastError('');
+        const status = getGraphQLStatus();
+        setDebugInfo(`连接已刷新 - 端点: ${status.endpoint}`);
+      } else {
+        setConnectionStatus('failed');
+        setLastError('连接刷新失败');
+        setDebugInfo('连接刷新失败');
+      }
     } catch (error) {
-      setLastError(`端点刷新失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      setConnectionStatus('failed');
+      const errorMsg = error instanceof Error ? error.message : '刷新失败';
+      setLastError(errorMsg);
+      setDebugInfo(`刷新错误: ${errorMsg}`);
     }
   };
 
-  // GraphQL 方式发送消息 - 优化版本，避免重复请求
+  // GraphQL 方式发送消息
   const sendMessageGraphQL = async (messageHistory: Message[]) => {
     const graphqlMessages: GraphQLMessage[] = messageHistory.map(msg => ({
       role: msg.role,
@@ -183,6 +211,7 @@ function App() {
   const clearChat = () => {
     setMessages([]);
     setLastError('');
+    setDebugInfo('');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -223,9 +252,9 @@ function App() {
         <h1>AI 聊天助手</h1>
         <div className="status">
           {getStatusIndicator()}
-          {currentEndpoint && (
+          {debugInfo && (
             <span style={{fontSize: '12px', color: '#666', marginLeft: '10px'}}>
-              端点: {currentEndpoint}
+              {debugInfo}
             </span>
           )}
         </div>
@@ -246,9 +275,8 @@ function App() {
             />
             GraphQL
           </label>
-          <button onClick={checkConnection}>测试连接</button>
-          <button onClick={handleRefreshEndpoint} disabled={loading}>
-            刷新端点
+          <button onClick={handleRefreshConnection} disabled={loading}>
+            刷新连接
           </button>
           <button onClick={clearChat}>清空</button>
         </div>
@@ -275,7 +303,6 @@ function App() {
             <h2>欢迎使用 AI 聊天助手 🤖</h2>
             <p>当前模式: {useGraphQL ? 'GraphQL' : 'REST API'}</p>
             <p>连接状态: {getStatusIndicator()}</p>
-            {currentEndpoint && <p>GraphQL端点: {currentEndpoint}</p>}
             <p>请输入您的问题开始对话</p>
           </div>
         ) : (
@@ -314,7 +341,6 @@ function App() {
               </div>
               <div style={{fontSize: '12px', color: '#666', marginTop: '5px'}}>
                 使用 {useGraphQL ? 'GraphQL' : 'REST API'} 模式
-                {currentEndpoint && ` (${currentEndpoint})`}
               </div>
             </div>
           </div>
