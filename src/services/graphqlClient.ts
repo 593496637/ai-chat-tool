@@ -1,4 +1,4 @@
-// 修复后的 graphqlClient.ts - 与Worker实现保持一致
+// 完整的 GraphQL 客户端 - 与 Worker 端点保持一致
 
 export interface Message {
   role: string;
@@ -11,10 +11,10 @@ export interface ChatResponse {
   }>;
 }
 
-// 与Worker中的实现保持一致的GraphQL查询
+// 与Worker中的实现完全一致的GraphQL查询
 const HELLO_QUERY = `query { hello }`;
 
-// 修正：使用 'chat' 而不是 'sendMessage'，与Worker保持一致
+// 使用 'chat' mutation，与Worker保持一致
 const CHAT_MUTATION = `
   mutation chat($input: ChatInput!) {
     chat(input: $input) {
@@ -51,8 +51,8 @@ function getApiUrl(): string {
     return 'http://localhost:8787/api/graphql'; // Wrangler默认端口
   }
   
-  // 默认回退
-  return 'https://bestvip.life/api/graphql';
+  // 默认回退到生产环境
+  return 'https://ai-chat-api.593496637.workers.dev/api/graphql';
 }
 
 // 改进的GraphQL客户端，增加错误处理和重试机制
@@ -63,6 +63,7 @@ export class GraphQLClient {
 
   constructor() {
     this.endpoint = getApiUrl();
+    console.log('GraphQL客户端初始化，端点:', this.endpoint);
   }
 
   // 私有方法：延迟函数
@@ -72,6 +73,8 @@ export class GraphQLClient {
 
   // 私有方法：执行HTTP请求
   private async executeRequest(query: string, variables?: any): Promise<any> {
+    console.log('发送GraphQL请求:', { query: query.trim(), variables, endpoint: this.endpoint });
+    
     const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: {
@@ -81,14 +84,19 @@ export class GraphQLClient {
       body: JSON.stringify({ query, variables }),
     });
 
+    console.log('GraphQL响应状态:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('GraphQL HTTP错误:', response.status, errorText);
       throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
     const result = await response.json();
+    console.log('GraphQL响应数据:', result);
     
     if (result.errors && result.errors.length > 0) {
+      console.error('GraphQL业务错误:', result.errors);
       throw new Error(result.errors[0].message || '未知GraphQL错误');
     }
 
@@ -101,6 +109,7 @@ export class GraphQLClient {
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
+        console.log(`GraphQL请求尝试 ${attempt}/${this.maxRetries}`);
         return await this.executeRequest(query, variables);
       } catch (error) {
         lastError = error as Error;
@@ -108,26 +117,32 @@ export class GraphQLClient {
         
         // 如果不是最后一次尝试，等待后重试
         if (attempt < this.maxRetries) {
-          await this.delay(this.retryDelay * attempt);
+          const delayMs = this.retryDelay * attempt;
+          console.log(`等待 ${delayMs}ms 后重试`);
+          await this.delay(delayMs);
         }
       }
     }
 
+    console.error('GraphQL请求最终失败:', lastError);
     throw lastError || new Error('GraphQL请求失败');
   }
 
   // 测试连接
   async testConnection(): Promise<boolean> {
     try {
+      console.log('测试GraphQL连接...');
       const data = await this.request<{ hello: string }>(HELLO_QUERY);
-      return data.hello === 'Hello from GraphQL API!';
+      const isConnected = data.hello === 'Hello from GraphQL API!';
+      console.log('GraphQL连接测试结果:', isConnected, data);
+      return isConnected;
     } catch (error) {
       console.error('GraphQL连接测试失败:', error);
       return false;
     }
   }
 
-  // 发送聊天消息 - 修正方法名和返回类型
+  // 发送聊天消息 - 使用正确的'chat' mutation
   async sendChatMessage(messages: Message[]): Promise<ChatResponse> {
     if (!Array.isArray(messages) || messages.length === 0) {
       throw new Error('消息数组不能为空');
@@ -140,11 +155,15 @@ export class GraphQLClient {
       }
     });
 
+    console.log('发送聊天消息:', messages);
+
     try {
       const data = await this.request<{ chat: ChatResponse }>(
         CHAT_MUTATION,
         { input: { messages } }
       );
+      
+      console.log('聊天响应:', data);
       return data.chat;
     } catch (error) {
       console.error('发送聊天消息失败:', error);
@@ -163,7 +182,10 @@ export class GraphQLClient {
 
   // 更新配置
   updateConfig(config: { endpoint?: string; maxRetries?: number; retryDelay?: number }) {
-    if (config.endpoint) this.endpoint = config.endpoint;
+    if (config.endpoint) {
+      this.endpoint = config.endpoint;
+      console.log('GraphQL端点已更新:', this.endpoint);
+    }
     if (config.maxRetries) this.maxRetries = config.maxRetries;
     if (config.retryDelay) this.retryDelay = config.retryDelay;
   }
@@ -204,3 +226,6 @@ export const refreshGraphQLConnection = async (): Promise<boolean> => {
 };
 
 export const getGraphQLStatus = () => graphqlClient.getStatus();
+
+// 调试信息
+console.log('GraphQL客户端模块已加载，默认端点:', getApiUrl());
