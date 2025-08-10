@@ -1,4 +1,4 @@
-// GraphQL 客户端和查询定义 - 优化版本，解决重复请求问题
+// GraphQL 客户端和查询定义 - 最终修复版，彻底解决重复请求问题
 
 export interface Message {
   role: string;
@@ -51,39 +51,70 @@ export const HELLO_QUERY = `
   }
 `;
 
-// 端点检测和缓存
-class EndpointManager {
-  private validEndpoint: string | null = null;
-  private lastTestTime: number = 0;
-  private testCacheDuration = 5 * 60 * 1000; // 5分钟缓存
+// 全局状态管理 - 防止重复初始化
+class GraphQLManager {
+  private static instance: GraphQLManager;
+  private isInitialized = false;
+  private isInitializing = false;
+  private initializationPromise: Promise<void> | null = null;
+  private endpoint = '/graphql'; // 统一使用 /graphql
+  private connectionStatus: 'unknown' | 'connected' | 'failed' = 'unknown';
 
-  async getValidEndpoint(): Promise<string> {
-    // 如果有缓存的有效端点且未过期，直接返回
-    if (this.validEndpoint && Date.now() - this.lastTestTime < this.testCacheDuration) {
-      console.log(`Using cached endpoint: ${this.validEndpoint}`);
-      return this.validEndpoint;
+  static getInstance(): GraphQLManager {
+    if (!GraphQLManager.instance) {
+      GraphQLManager.instance = new GraphQLManager();
     }
-
-    // 测试端点
-    const endpoints = ['/graphql', '/api/graphql'];
-    
-    for (const endpoint of endpoints) {
-      if (await this.testEndpoint(endpoint)) {
-        this.validEndpoint = endpoint;
-        this.lastTestTime = Date.now();
-        console.log(`Found valid endpoint: ${endpoint}`);
-        return endpoint;
-      }
-    }
-
-    // 如果都测试失败，返回默认端点
-    console.warn('No valid endpoint found, using default /graphql');
-    return '/graphql';
+    return GraphQLManager.instance;
   }
 
-  private async testEndpoint(endpoint: string): Promise<boolean> {
+  async initialize(): Promise<void> {
+    // 如果已经初始化或正在初始化，直接返回
+    if (this.isInitialized) {
+      console.log('GraphQL manager already initialized');
+      return;
+    }
+
+    if (this.isInitializing) {
+      console.log('GraphQL manager initialization in progress, waiting...');
+      return this.initializationPromise!;
+    }
+
+    this.isInitializing = true;
+    this.initializationPromise = this.doInitialize();
+    
     try {
-      const response = await fetch(endpoint, {
+      await this.initializationPromise;
+      this.isInitialized = true;
+      console.log('GraphQL manager initialization completed');
+    } catch (error) {
+      console.error('GraphQL manager initialization failed:', error);
+      this.connectionStatus = 'failed';
+    } finally {
+      this.isInitializing = false;
+    }
+  }
+
+  private async doInitialize(): Promise<void> {
+    try {
+      console.log('Testing GraphQL connection...');
+      const result = await this.testConnectionInternal();
+      
+      if (result) {
+        this.connectionStatus = 'connected';
+        console.log('GraphQL connection established successfully');
+      } else {
+        this.connectionStatus = 'failed';
+        console.log('GraphQL connection test failed');
+      }
+    } catch (error) {
+      this.connectionStatus = 'failed';
+      console.error('GraphQL initialization error:', error);
+    }
+  }
+
+  private async testConnectionInternal(): Promise<boolean> {
+    try {
+      const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,58 +128,57 @@ class EndpointManager {
         const result = await response.json();
         return result.data?.hello === 'Hello from GraphQL API!';
       }
+      
+      console.error(`GraphQL test failed with status: ${response.status}`);
+      return false;
     } catch (error) {
-      console.log(`Endpoint ${endpoint} test failed:`, error);
+      console.error('GraphQL connection test error:', error);
+      return false;
     }
-    return false;
   }
 
-  // 清除缓存（用于强制重新检测）
-  clearCache(): void {
-    this.validEndpoint = null;
-    this.lastTestTime = 0;
+  getEndpoint(): string {
+    return this.endpoint;
   }
 
-  // 获取当前缓存的端点
-  getCachedEndpoint(): string | null {
-    return this.validEndpoint;
+  getConnectionStatus(): 'unknown' | 'connected' | 'failed' {
+    return this.connectionStatus;
+  }
+
+  // 强制重新初始化
+  async reinitialize(): Promise<void> {
+    this.isInitialized = false;
+    this.isInitializing = false;
+    this.initializationPromise = null;
+    this.connectionStatus = 'unknown';
+    await this.initialize();
   }
 }
 
-// 全局端点管理器
-const endpointManager = new EndpointManager();
+// 全局管理器实例
+const graphqlManager = GraphQLManager.getInstance();
 
-// GraphQL 客户端类 - 优化版本
+// GraphQL 客户端类 - 简化版本
 export class GraphQLClient {
-  private endpoint: string;
-
-  constructor(endpoint?: string) {
-    this.endpoint = endpoint || '/graphql';
-  }
-
-  // 设置端点
-  setEndpoint(endpoint: string) {
-    this.endpoint = endpoint;
-  }
-
   async query<T = any>(
     query: string, 
     variables: Record<string, any> = {}
   ): Promise<{ data?: T; errors?: Array<{ message: string }> }> {
     try {
-      // 如果没有指定端点，自动获取有效端点
-      if (!this.endpoint || this.endpoint === '/graphql') {
-        this.endpoint = await endpointManager.getValidEndpoint();
-      }
-
+      // 确保已初始化
+      await graphqlManager.initialize();
+      
+      const endpoint = graphqlManager.getEndpoint();
+      
       console.log('Sending GraphQL request...', { 
-        endpoint: this.endpoint,
+        endpoint,
         query: query.substring(0, 50) + '...', 
         variables 
       });
+      
       const startTime = Date.now();
 
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -165,21 +195,16 @@ export class GraphQLClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`HTTP error! status: ${response.status}, body: ${errorText}`);
-        
-        // 如果是405错误，清除端点缓存并抛出错误
-        if (response.status === 405) {
-          endpointManager.clearCache();
-        }
-        
+        console.error(`GraphQL HTTP error! status: ${response.status}, body: ${errorText}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('GraphQL response:', result);
-
+      
       if (result.errors) {
         console.error('GraphQL errors:', result.errors);
+      } else {
+        console.log('GraphQL request successful');
       }
 
       return result;
@@ -214,38 +239,16 @@ export class GraphQLClient {
 
     return result.data?.hello || null;
   }
-
-  // 获取当前端点
-  getCurrentEndpoint(): string {
-    return this.endpoint;
-  }
-
-  // 强制重新检测端点
-  async refreshEndpoint(): Promise<string> {
-    endpointManager.clearCache();
-    this.endpoint = await endpointManager.getValidEndpoint();
-    return this.endpoint;
-  }
 }
 
 // 导出默认客户端实例
 export const graphqlClient = new GraphQLClient();
 
-// 工具函数：测试 GraphQL 连接（优化版本，不会重复请求）
+// 工具函数：测试 GraphQL 连接（防止重复调用）
 export async function testGraphQLConnection(): Promise<boolean> {
   try {
-    // 使用端点管理器获取有效端点
-    const validEndpoint = await endpointManager.getValidEndpoint();
-    const client = new GraphQLClient(validEndpoint);
-    const result = await client.testConnection();
-    console.log(`GraphQL connection test result:`, result);
-    
-    if (result === 'Hello from GraphQL API!') {
-      // 更新全局客户端端点
-      graphqlClient.setEndpoint(validEndpoint);
-      return true;
-    }
-    return false;
+    await graphqlManager.initialize();
+    return graphqlManager.getConnectionStatus() === 'connected';
   } catch (error) {
     console.error('GraphQL connection test failed:', error);
     return false;
@@ -279,14 +282,24 @@ export async function getHealthStatus(): Promise<any> {
   return null;
 }
 
-// 工具函数：手动刷新端点（用于调试）
-export async function refreshGraphQLEndpoint(): Promise<string> {
-  const newEndpoint = await graphqlClient.refreshEndpoint();
-  console.log(`Refreshed GraphQL endpoint: ${newEndpoint}`);
-  return newEndpoint;
+// 工具函数：手动刷新连接
+export async function refreshGraphQLConnection(): Promise<boolean> {
+  try {
+    await graphqlManager.reinitialize();
+    return graphqlManager.getConnectionStatus() === 'connected';
+  } catch (error) {
+    console.error('Failed to refresh GraphQL connection:', error);
+    return false;
+  }
 }
 
-// 工具函数：获取当前有效端点
-export function getCurrentValidEndpoint(): string | null {
-  return endpointManager.getCachedEndpoint();
+// 工具函数：获取当前状态
+export function getGraphQLStatus(): {
+  endpoint: string;
+  status: 'unknown' | 'connected' | 'failed';
+} {
+  return {
+    endpoint: graphqlManager.getEndpoint(),
+    status: graphqlManager.getConnectionStatus()
+  };
 }
