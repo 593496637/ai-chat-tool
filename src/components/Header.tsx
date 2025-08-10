@@ -1,6 +1,6 @@
 // src/components/Header.tsx
 import React, { useEffect } from 'react';
-import { useChat } from '@/hooks/useChat';
+import { useChat } from '../hooks/useChat';
 import StatusIndicator from './StatusIndicator';
 
 const Header: React.FC = () => {
