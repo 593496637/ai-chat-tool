@@ -1,5 +1,4 @@
 // src/components/ChatMessage.tsx
-import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '../types';
@@ -26,9 +25,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, useMarkdown }) => {
             remarkPlugins={[remarkGfm]}
             components={{
               // 自定义代码块样式
-              code({ node, inline, className, children, ...props }) {
+              code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
-                return !inline && match ? (
+                const isInline = !className;
+                
+                return !isInline && match ? (
                   <pre className={`language-${match[1]}`}>
                     <code className={className} {...props}>
                       {children}
@@ -103,4 +104,4 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, useMarkdown }) => {
   );
 };
 
-export default React.memo(ChatMessage);
+export default ChatMessage;

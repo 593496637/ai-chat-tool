@@ -35,7 +35,6 @@ function getApiUrl(): string {
   }
   
   const host = window.location.hostname;
-  const protocol = window.location.protocol;
   
   // 生产环境
   if (host === 'bestvip.life') {
