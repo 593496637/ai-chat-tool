@@ -1,5 +1,5 @@
 // src/components/ErrorBoundary.tsx
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -42,6 +42,8 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const isDevelopment = import.meta.env?.DEV || false;
+      
       return (
         <div className="error-boundary">
           <div className="error-content">
@@ -66,7 +68,7 @@ class ErrorBoundary extends Component<Props, State> {
               </button>
             </div>
 
-            {process.env.NODE_ENV === 'development' && (
+            {isDevelopment && (
               <details className="error-details">
                 <summary>📋 错误详情（开发模式）</summary>
                 <div className="error-stack">
