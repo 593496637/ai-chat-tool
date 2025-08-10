@@ -114,7 +114,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           console.warn('GraphQL失败，切换到REST:', error);
           dispatch({ type: 'UPDATE_CONFIG', payload: { useGraphQL: false } });
           
-          // 使用REST API作为备选
           const restResponse = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -129,7 +128,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           responseContent = restData.choices?.[0]?.message?.content || '抱歉，我无法回答这个问题。';
         }
       } else {
-        // 直接使用REST API
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -183,7 +181,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       const status: ConnectionStatus = {
         status: healthOk && graphqlOk ? 'connected' : 'failed',
-        endpoint: '', // 这里可以从graphqlClient获取
+        endpoint: '',
         lastChecked: new Date(),
         error: !healthOk ? '健康检查失败' : !graphqlOk ? 'GraphQL连接失败' : undefined,
       };
@@ -209,11 +207,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     checkConnection,
   };
 
-  return (
-    <ChatContext.Provider value={value}>
-      {children}
-    </ChatContext.Provider>
-  );
+  return React.createElement(ChatContext.Provider, { value }, children);
 }
 
 export function useChat() {
