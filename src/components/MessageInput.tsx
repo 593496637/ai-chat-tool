@@ -1,6 +1,6 @@
 // src/components/MessageInput.tsx
 import React, { useState, useRef, useCallback } from 'react';
-import { useChat } from '@/hooks/useChat';
+import { useChat } from '../hooks/useChat';
 
 const MessageInput: React.FC = () => {
   const { state, sendMessage } = useChat();
