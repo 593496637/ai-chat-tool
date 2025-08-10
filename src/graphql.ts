@@ -1,4 +1,4 @@
-// GraphQL 客户端和查询定义 - 最终修复版，彻底解决重复请求问题
+// GraphQL 客户端和查询定义 - 简化版，修复连接问题
 
 export interface Message {
   role: string;
@@ -51,134 +51,115 @@ export const HELLO_QUERY = `
   }
 `;
 
-// 全局状态管理 - 防止重复初始化
-class GraphQLManager {
-  private static instance: GraphQLManager;
+// 简化的连接管理器
+class SimpleGraphQLManager {
+  private static instance: SimpleGraphQLManager;
   private isInitialized = false;
-  private isInitializing = false;
-  private initializationPromise: Promise<void> | null = null;
-  private endpoint = '/graphql'; // 统一使用 /graphql
-  private connectionStatus: 'unknown' | 'connected' | 'failed' = 'unknown';
+  private isConnected = false;
+  private endpoint = '/graphql';
+  private initPromise: Promise<boolean> | null = null;
 
-  static getInstance(): GraphQLManager {
-    if (!GraphQLManager.instance) {
-      GraphQLManager.instance = new GraphQLManager();
+  static getInstance(): SimpleGraphQLManager {
+    if (!SimpleGraphQLManager.instance) {
+      SimpleGraphQLManager.instance = new SimpleGraphQLManager();
     }
-    return GraphQLManager.instance;
+    return SimpleGraphQLManager.instance;
   }
 
-  async initialize(): Promise<void> {
-    // 如果已经初始化或正在初始化，直接返回
+  async initialize(): Promise<boolean> {
+    // 如果已经初始化过，直接返回状态
     if (this.isInitialized) {
-      console.log('GraphQL manager already initialized');
-      return;
+      console.log('GraphQL already initialized, connection status:', this.isConnected);
+      return this.isConnected;
     }
 
-    if (this.isInitializing) {
-      console.log('GraphQL manager initialization in progress, waiting...');
-      return this.initializationPromise!;
+    // 如果正在初始化，等待结果
+    if (this.initPromise) {
+      console.log('GraphQL initialization in progress, waiting...');
+      return await this.initPromise;
     }
 
-    this.isInitializing = true;
-    this.initializationPromise = this.doInitialize();
+    console.log('Starting GraphQL initialization...');
+    this.initPromise = this.doInitialize();
+    const result = await this.initPromise;
+    this.isInitialized = true;
+    this.initPromise = null;
     
-    try {
-      await this.initializationPromise;
-      this.isInitialized = true;
-      console.log('GraphQL manager initialization completed');
-    } catch (error) {
-      console.error('GraphQL manager initialization failed:', error);
-      this.connectionStatus = 'failed';
-    } finally {
-      this.isInitializing = false;
-    }
+    console.log('GraphQL initialization completed:', result);
+    return result;
   }
 
-  private async doInitialize(): Promise<void> {
+  private async doInitialize(): Promise<boolean> {
     try {
-      console.log('Testing GraphQL connection...');
-      const result = await this.testConnectionInternal();
+      console.log('Testing GraphQL connection to', this.endpoint);
       
-      if (result) {
-        this.connectionStatus = 'connected';
-        console.log('GraphQL connection established successfully');
-      } else {
-        this.connectionStatus = 'failed';
-        console.log('GraphQL connection test failed');
-      }
-    } catch (error) {
-      this.connectionStatus = 'failed';
-      console.error('GraphQL initialization error:', error);
-    }
-  }
-
-  private async testConnectionInternal(): Promise<boolean> {
-    try {
       const response = await fetch(this.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify({
           query: HELLO_QUERY,
         }),
       });
 
+      console.log('GraphQL test response status:', response.status);
+
       if (response.ok) {
         const result = await response.json();
-        return result.data?.hello === 'Hello from GraphQL API!';
+        console.log('GraphQL test result:', result);
+        
+        if (result.data?.hello === 'Hello from GraphQL API!') {
+          this.isConnected = true;
+          console.log('GraphQL connection successful');
+          return true;
+        } else {
+          console.error('GraphQL test failed: invalid response', result);
+        }
+      } else {
+        const errorText = await response.text();
+        console.error(`GraphQL test failed: ${response.status} - ${errorText}`);
       }
       
-      console.error(`GraphQL test failed with status: ${response.status}`);
+      this.isConnected = false;
       return false;
     } catch (error) {
       console.error('GraphQL connection test error:', error);
+      this.isConnected = false;
       return false;
     }
   }
 
-  getEndpoint(): string {
-    return this.endpoint;
+  getStatus(): { endpoint: string; connected: boolean } {
+    return {
+      endpoint: this.endpoint,
+      connected: this.isConnected
+    };
   }
 
-  getConnectionStatus(): 'unknown' | 'connected' | 'failed' {
-    return this.connectionStatus;
-  }
-
-  // 强制重新初始化
-  async reinitialize(): Promise<void> {
+  async reset(): Promise<boolean> {
+    console.log('Resetting GraphQL connection...');
     this.isInitialized = false;
-    this.isInitializing = false;
-    this.initializationPromise = null;
-    this.connectionStatus = 'unknown';
-    await this.initialize();
+    this.isConnected = false;
+    this.initPromise = null;
+    return await this.initialize();
   }
 }
 
 // 全局管理器实例
-const graphqlManager = GraphQLManager.getInstance();
+const manager = SimpleGraphQLManager.getInstance();
 
-// GraphQL 客户端类 - 简化版本
+// 简化的GraphQL客户端
 export class GraphQLClient {
   async query<T = any>(
     query: string, 
     variables: Record<string, any> = {}
   ): Promise<{ data?: T; errors?: Array<{ message: string }> }> {
     try {
-      // 确保已初始化
-      await graphqlManager.initialize();
+      console.log('GraphQL request:', { query: query.substring(0, 50) + '...', variables });
       
-      const endpoint = graphqlManager.getEndpoint();
-      
-      console.log('Sending GraphQL request...', { 
-        endpoint,
-        query: query.substring(0, 50) + '...', 
-        variables 
-      });
-      
-      const startTime = Date.now();
-
-      const response = await fetch(endpoint, {
+      const response = await fetch('/graphql', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,26 +171,20 @@ export class GraphQLClient {
         }),
       });
 
-      const duration = Date.now() - startTime;
-      console.log(`GraphQL request completed in ${duration}ms (status: ${response.status})`);
+      console.log('GraphQL response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`GraphQL HTTP error! status: ${response.status}, body: ${errorText}`);
+        console.error(`GraphQL HTTP error: ${response.status} - ${errorText}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      
-      if (result.errors) {
-        console.error('GraphQL errors:', result.errors);
-      } else {
-        console.log('GraphQL request successful');
-      }
+      console.log('GraphQL result:', result);
 
       return result;
     } catch (error) {
-      console.error('GraphQL client error:', error);
+      console.error('GraphQL request failed:', error);
       return {
         errors: [{ message: error instanceof Error ? error.message : 'Unknown error' }]
       };
@@ -228,27 +203,16 @@ export class GraphQLClient {
 
     return result.data?.sendMessage || null;
   }
-
-  async testConnection(): Promise<string | null> {
-    const result = await this.query<{ hello: string }>(HELLO_QUERY);
-    
-    if (result.errors) {
-      console.error('Connection test failed:', result.errors);
-      return null;
-    }
-
-    return result.data?.hello || null;
-  }
 }
 
 // 导出默认客户端实例
 export const graphqlClient = new GraphQLClient();
 
-// 工具函数：测试 GraphQL 连接（防止重复调用）
+// 工具函数：测试GraphQL连接
 export async function testGraphQLConnection(): Promise<boolean> {
   try {
-    await graphqlManager.initialize();
-    return graphqlManager.getConnectionStatus() === 'connected';
+    console.log('Testing GraphQL connection...');
+    return await manager.initialize();
   } catch (error) {
     console.error('GraphQL connection test failed:', error);
     return false;
@@ -272,34 +236,38 @@ export async function sendChatMessage(messages: Message[]): Promise<ChatResponse
 // 工具函数：获取健康状态
 export async function getHealthStatus(): Promise<any> {
   try {
+    console.log('Checking health status...');
     const response = await fetch('/health');
+    console.log('Health response status:', response.status);
+    
     if (response.ok) {
-      return await response.json();
+      const result = await response.json();
+      console.log('Health result:', result);
+      return result;
     }
+    return null;
   } catch (error) {
     console.error('Health check failed:', error);
+    return null;
   }
-  return null;
 }
 
-// 工具函数：手动刷新连接
+// 工具函数：刷新连接
 export async function refreshGraphQLConnection(): Promise<boolean> {
   try {
-    await graphqlManager.reinitialize();
-    return graphqlManager.getConnectionStatus() === 'connected';
+    console.log('Refreshing GraphQL connection...');
+    return await manager.reset();
   } catch (error) {
     console.error('Failed to refresh GraphQL connection:', error);
     return false;
   }
 }
 
-// 工具函数：获取当前状态
-export function getGraphQLStatus(): {
-  endpoint: string;
-  status: 'unknown' | 'connected' | 'failed';
-} {
+// 工具函数：获取状态
+export function getGraphQLStatus(): { endpoint: string; status: string } {
+  const status = manager.getStatus();
   return {
-    endpoint: graphqlManager.getEndpoint(),
-    status: graphqlManager.getConnectionStatus()
+    endpoint: status.endpoint,
+    status: status.connected ? 'connected' : 'failed'
   };
 }
