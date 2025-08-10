@@ -1,4 +1,4 @@
-// Cloudflare Workers - AI聊天API (GraphQL + REST) - 简化健壮版
+// Cloudflare Workers - 诊断版，详细记录所有请求信息
 
 // DeepSeek API调用函数
 async function callDeepSeekAPI(messages, env) {
@@ -56,11 +56,24 @@ export default {
     const method = request.method;
     const pathname = url.pathname;
     
-    console.log(`[${new Date().toISOString()}] ${method} ${pathname}`);
+    // 详细的请求日志
+    console.log('=== 请求详细信息 ===');
+    console.log(`时间: ${new Date().toISOString()}`);
+    console.log(`方法: ${method}`);
+    console.log(`URL: ${request.url}`);
+    console.log(`路径: ${pathname}`);
+    console.log(`Headers:`, Object.fromEntries(request.headers));
+    console.log(`CF信息:`, {
+      cf: request.cf,
+      'x-forwarded-proto': request.headers.get('x-forwarded-proto'),
+      'x-real-ip': request.headers.get('x-real-ip'),
+      'cf-ray': request.headers.get('cf-ray')
+    });
+    console.log('========================');
     
     // 处理CORS预检请求
     if (method === 'OPTIONS') {
-      console.log('CORS preflight request');
+      console.log('处理CORS预检请求');
       return new Response(null, {
         status: 200,
         headers: {
@@ -76,31 +89,79 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Content-Type': 'application/json',
+      'X-Worker-Version': '1.0.0',
+      'X-Request-ID': `req-${Date.now()}`,
     };
 
     try {
+      // 特殊诊断端点
+      if (pathname === '/debug') {
+        const duration = Date.now() - startTime;
+        return new Response(JSON.stringify({
+          message: 'Worker调试信息',
+          request: {
+            method,
+            url: request.url,
+            pathname,
+            headers: Object.fromEntries(request.headers),
+            cf: request.cf
+          },
+          worker: {
+            version: '1.0.0',
+            environment: env.ENVIRONMENT || 'unknown',
+            timestamp: new Date().toISOString()
+          },
+          response_time: `${duration}ms`
+        }, null, 2), {
+          headers: corsHeaders,
+        });
+      }
+
       // GraphQL端点处理
       if (pathname === '/graphql') {
-        console.log('Processing GraphQL request...');
+        console.log('*** 进入GraphQL处理逻辑 ***');
+        console.log(`请求方法: ${method}`);
         
         if (method !== 'POST') {
-          console.log(`GraphQL: Method ${method} not allowed`);
-          return new Response(JSON.stringify({
-            errors: [{ message: `Method ${method} not allowed. Use POST.` }]
-          }), { 
+          console.log(`*** GraphQL错误: 方法 ${method} 不被允许 ***`);
+          const errorResponse = {
+            errors: [{ 
+              message: `Method ${method} not allowed for GraphQL endpoint`,
+              code: 'METHOD_NOT_ALLOWED',
+              details: {
+                received_method: method,
+                allowed_methods: ['POST'],
+                endpoint: pathname,
+                timestamp: new Date().toISOString()
+              }
+            }]
+          };
+          
+          return new Response(JSON.stringify(errorResponse, null, 2), { 
             status: 405,
-            headers: { ...corsHeaders, 'Allow': 'POST, OPTIONS' }
+            headers: { 
+              ...corsHeaders, 
+              'Allow': 'POST, OPTIONS',
+              'X-Error-Type': 'METHOD_NOT_ALLOWED'
+            }
           });
         }
 
+        console.log('*** GraphQL方法验证通过 ***');
+
         let requestBody;
         try {
-          requestBody = await request.json();
-          console.log('GraphQL request body:', JSON.stringify(requestBody, null, 2));
+          const bodyText = await request.text();
+          console.log('*** 原始请求体 ***', bodyText);
+          requestBody = JSON.parse(bodyText);
+          console.log('*** 解析后的请求体 ***', JSON.stringify(requestBody, null, 2));
         } catch (error) {
-          console.error('Invalid JSON in GraphQL request:', error);
+          console.error('*** JSON解析错误 ***', error);
           return new Response(JSON.stringify({ 
-            errors: [{ message: 'Invalid JSON in request body' }] 
+            errors: [{ 
+              message: 'Invalid JSON in request body',
+              details: error.message 
+            }] 
           }), {
             status: 400,
             headers: corsHeaders,
@@ -108,7 +169,7 @@ export default {
         }
         
         if (!requestBody || !requestBody.query) {
-          console.log('Missing query in GraphQL request');
+          console.log('*** 缺少GraphQL查询 ***');
           return new Response(JSON.stringify({ 
             errors: [{ message: 'GraphQL query is required' }] 
           }), {
@@ -120,27 +181,29 @@ export default {
         const query = requestBody.query.trim();
         const variables = requestBody.variables || {};
         
-        console.log('GraphQL Query:', query);
-        console.log('GraphQL Variables:', JSON.stringify(variables));
+        console.log('*** GraphQL查询 ***', query);
+        console.log('*** GraphQL变量 ***', JSON.stringify(variables));
 
-        // 处理 hello 查询 - 连接测试
+        // 处理 hello 查询
         if (query.toLowerCase().includes('hello')) {
-          console.log('Executing hello query');
+          console.log('*** 执行hello查询 ***');
           const duration = Date.now() - startTime;
-          return new Response(JSON.stringify({
+          const response = {
             data: { hello: 'Hello from GraphQL API!' }
-          }), {
+          };
+          console.log('*** hello查询响应 ***', response);
+          return new Response(JSON.stringify(response), {
             headers: { ...corsHeaders, 'X-Response-Time': `${duration}ms` },
           });
         }
 
         // 处理 sendMessage mutation
         if (query.toLowerCase().includes('sendmessage') && query.toLowerCase().includes('mutation')) {
-          console.log('Executing sendMessage mutation');
+          console.log('*** 执行sendMessage变更 ***');
           const messages = variables.input?.messages || [];
           
           if (!Array.isArray(messages) || messages.length === 0) {
-            console.log('Invalid messages in sendMessage mutation');
+            console.log('*** sendMessage变更参数无效 ***');
             return new Response(JSON.stringify({
               errors: [{ message: 'Messages array is required and cannot be empty' }]
             }), {
@@ -149,7 +212,7 @@ export default {
             });
           }
           
-          console.log(`Processing ${messages.length} messages`);
+          console.log(`*** 处理 ${messages.length} 条消息 ***`);
           const data = await callDeepSeekAPI(messages, env);
           
           const result = {
@@ -159,18 +222,19 @@ export default {
           };
 
           const duration = Date.now() - startTime;
-          console.log(`sendMessage completed in ${duration}ms`);
+          console.log(`*** sendMessage完成，耗时 ${duration}ms ***`);
           return new Response(JSON.stringify(result), {
             headers: { ...corsHeaders, 'X-Response-Time': `${duration}ms` },
           });
         }
 
         // 未知GraphQL操作
-        console.log('Unknown GraphQL operation');
+        console.log('*** 未知GraphQL操作 ***');
         return new Response(JSON.stringify({
           errors: [{ 
             message: 'Unknown GraphQL operation',
-            query: query.substring(0, 100) + (query.length > 100 ? '...' : '')
+            received_query: query,
+            supported_operations: ['hello query', 'sendMessage mutation']
           }]
         }), {
           status: 400,
@@ -180,7 +244,7 @@ export default {
 
       // REST API端点
       if (pathname === '/api/chat') {
-        console.log('Processing REST chat request...');
+        console.log('*** 处理REST聊天请求 ***');
         
         if (method !== 'POST') {
           return new Response(JSON.stringify({
@@ -207,7 +271,7 @@ export default {
         const data = await callDeepSeekAPI(body.messages, env);
         const duration = Date.now() - startTime;
         
-        console.log(`REST chat completed in ${duration}ms`);
+        console.log(`*** REST聊天完成，耗时 ${duration}ms ***`);
         return new Response(JSON.stringify(data), {
           headers: { ...corsHeaders, 'X-Response-Time': `${duration}ms` },
         });
@@ -219,10 +283,13 @@ export default {
         return new Response(JSON.stringify({
           status: 'ok',
           timestamp: new Date().toISOString(),
+          worker_version: '1.0.0',
+          environment: env.ENVIRONMENT || 'unknown',
           endpoints: {
-            graphql: '/graphql',
-            chat: '/api/chat',
-            health: '/health'
+            graphql: '/graphql (POST)',
+            chat: '/api/chat (POST)',
+            health: '/health (GET)',
+            debug: '/debug (GET)'
           },
           response_time: `${duration}ms`
         }), {
@@ -235,10 +302,12 @@ export default {
         return new Response(JSON.stringify({
           message: 'AI Chat Tool API',
           status: 'running',
+          worker_version: '1.0.0',
           endpoints: {
             graphql: '/graphql (POST)',
             chat: '/api/chat (POST)', 
-            health: '/health (GET)'
+            health: '/health (GET)',
+            debug: '/debug (GET)'
           }
         }), {
           headers: corsHeaders,
@@ -246,12 +315,12 @@ export default {
       }
 
       // 404 - 未知路径
-      console.log(`404: Unknown path ${pathname}`);
+      console.log(`*** 404: 未知路径 ${pathname} ***`);
       return new Response(JSON.stringify({
         error: 'Not Found',
         path: pathname,
         message: `Path ${pathname} not found`,
-        available_endpoints: ['/graphql', '/api/chat', '/health']
+        available_endpoints: ['/graphql', '/api/chat', '/health', '/debug']
       }), { 
         status: 404,
         headers: corsHeaders,
@@ -259,12 +328,13 @@ export default {
       
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('Worker Error:', error);
+      console.error('*** Worker严重错误 ***', error);
       
       return new Response(JSON.stringify({ 
         errors: [{ 
           message: error.message || '服务器内部错误，请稍后再试',
-          type: 'internal_error'
+          type: 'internal_error',
+          details: error.stack
         }]
       }), {
         status: 500,
