@@ -91,9 +91,7 @@ const MessageInput: React.FC = () => {
       </div>
       
       <div className="input-hints">
-        <span className="hint">
-          💡 支持Markdown格式 | 当前模式: GraphQL Only
-        </span>
+        💡 支持Markdown格式
       </div>
     </div>
   );

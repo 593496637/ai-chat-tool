@@ -2,7 +2,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useChat } from '../hooks/useChat';
 import ChatMessage from './ChatMessage';
-import LoadingMessage from './LoadingMessage';
 import WelcomeMessage from './WelcomeMessage';
 
 const MessageList: React.FC = () => {
@@ -34,7 +33,12 @@ const MessageList: React.FC = () => {
         )}
 
         {loading && (
-          <LoadingMessage useGraphQL={config.useGraphQL} />
+          <div className="message assistant">
+            <div className="avatar">🤖</div>
+            <div className="content">
+              <div>正在思考中...</div>
+            </div>
+          </div>
         )}
 
         <div ref={messagesEndRef} />
