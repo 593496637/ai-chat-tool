@@ -11,10 +11,15 @@ const MessageList: React.FC = () => {
 
   // 自动滚动到底部
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ 
-      behavior: 'smooth',
-      block: 'end'
-    });
+    // 延迟滚动，确保DOM更新完成
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, [messages, loading]);
 
   return (
