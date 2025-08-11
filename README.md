@@ -1,7 +1,7 @@
 # AI聊天工具 v2.0 (重构版本)
 
 ![Deploy Status](https://github.com/593496637/ai-chat-tool/workflows/Deploy%20to%20Cloudflare/badge.svg)
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.5.3-blue.svg)
 ![React](https://img.shields.io/badge/React-18.3.1-blue.svg)
 
@@ -40,7 +40,7 @@
 
 ## 🌐 在线访问
 
-**网站地址**: https://bestvip.life
+**网站地址**: https://sunnyday.pw
 
 ## 📁 项目结构
 
@@ -329,6 +329,12 @@ npm run build -- --analyze
 
 ## 📝 更新日志
 
+### v2.0.1 (2025-08-11)
+- 🌐 **域名迁移**: 从 bestvip.life 迁移到 sunnyday.pw
+- 🔧 **修复路由**: 添加完整域名路由支持
+- 📝 **文档更新**: 更新所有文档和示例
+- ⚡ **性能优化**: 改进静态文件代理
+
 ### v2.0.0 (2025-01-XX)
 - 🏗️ 完全重构项目架构
 - 🔧 修复GraphQL Schema不一致问题
@@ -359,7 +365,7 @@ MIT License - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ---
 
-**🎉 立即体验**: https://bestvip.life
+**🎉 立即体验**: https://sunnyday.pw
 
 **📧 问题反馈**: 通过GitHub Issues提交
 
