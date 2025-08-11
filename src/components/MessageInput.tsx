@@ -37,16 +37,12 @@ const MessageInput: React.FC = () => {
     setInput('');
     
     // 重置textarea高度
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
     }
 
     await sendMessage(messageContent);
-  };
-
-  const handlePaste = () => {
-    // 延迟调整高度，确保粘贴内容已插入
-    setTimeout(adjustTextareaHeight, 0);
   };
 
   return (
@@ -57,7 +53,7 @@ const MessageInput: React.FC = () => {
           value={input}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
+          onPaste={adjustTextareaHeight}
           placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
           disabled={state.loading}
           className="message-textarea"

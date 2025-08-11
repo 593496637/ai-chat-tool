@@ -71,51 +71,167 @@ body {
   min-height: 100%;
 }
 
+/* 消息容器样式 */
 .message {
   display: flex;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  opacity: 0;
+  animation: fadeInUp 0.3s ease-out forwards;
+  position: relative;
 }
 
 .message.user {
   flex-direction: row-reverse;
 }
 
-.avatar {
-  width: 36px;
-  height: 36px;
+/* 消息淡入动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 用户头像样式 */
+.message-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  background: #e9ecef;
+  font-size: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
 
-.content {
-  max-width: 70%;
-  background: #f8f9fa;
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
+.message-avatar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
 }
 
-.message.user .content {
-  background: #4a90e2;
+.message-avatar:hover::before {
+  opacity: 1;
+}
+
+.message.user .message-avatar {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+}
+
+.message-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 消息内容区域 */
+.message-content {
+  flex: 1;
+  min-width: 0;
+  max-width: 75%;
+}
+
+/* 消息主体样式 */
+.message-body {
+  background: #ffffff;
+  padding: 16px 20px;
+  border-radius: 18px;
+  border: 1px solid #e3e8f0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.message-body::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 8px 8px 8px 0;
+  border-color: transparent #ffffff transparent transparent;
+  filter: drop-shadow(-1px 0 1px rgba(227, 232, 240, 0.8));
+}
+
+.message.user .message-body {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
   color: white;
   border-color: #357abd;
 }
 
-.timestamp {
-  font-size: 11px;
-  color: #6c757d;
-  margin-top: 4px;
+.message.user .message-body::before {
+  left: auto;
+  right: -8px;
+  border-width: 8px 0 8px 8px;
+  border-color: transparent transparent transparent #4a90e2;
+  filter: drop-shadow(1px 0 1px rgba(53, 122, 189, 0.3));
 }
 
-.message.user .timestamp {
-  color: rgba(255, 255, 255, 0.8);
-  text-align: right;
+.message-body:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* 消息元信息 */
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+.message.user .message-meta {
+  justify-content: flex-end;
+}
+
+.message-time {
+  font-size: 11px;
+  color: #8b9dc3;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.message.user .message-time {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.message-role {
+  font-size: 10px;
+  color: #6c7b93;
+  background: #f1f3f9;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message:hover .message-time {
+  color: #4a90e2;
+}
+
+.message.user:hover .message-time {
+  color: white;
 }
 
 .input-area {
@@ -173,41 +289,213 @@ body {
   color: #6c757d;
 }
 
-/* Markdown样式 */
-.content h1, .content h2, .content h3 {
-  margin: 12px 0 6px 0;
+/* 文本内容样式 */
+.text-content {
+  font-size: 15px;
+  line-height: 1.6;
   color: inherit;
+  word-wrap: break-word;
 }
 
-.content p {
-  margin: 6px 0;
+.message.user .text-content {
+  color: white;
 }
 
-.content ul, .content ol {
-  margin: 6px 0;
-  padding-left: 16px;
+/* Markdown 内容容器 */
+.markdown-content {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #2c3e50;
+  word-wrap: break-word;
 }
 
-.content code {
-  background: rgba(0, 0, 0, 0.05);
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-family: 'Monaco', 'Consolas', monospace;
-  font-size: 0.9em;
+.message.user .markdown-content {
+  color: white;
 }
 
-.content pre {
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
-  padding: 12px;
-  border-radius: 6px;
-  overflow-x: auto;
+/* Markdown 标题样式 */
+.markdown-h1, .markdown-h2, .markdown-h3 {
+  margin: 16px 0 10px 0;
+  font-weight: 600;
+  color: inherit;
+  line-height: 1.3;
+}
+
+.markdown-h1 {
+  font-size: 1.8em;
+  border-bottom: 2px solid #e3e8f0;
+  padding-bottom: 8px;
+}
+
+.markdown-h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #e3e8f0;
+  padding-bottom: 6px;
+}
+
+.markdown-h3 {
+  font-size: 1.3em;
+}
+
+.message.user .markdown-h1,
+.message.user .markdown-h2 {
+  border-bottom-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Markdown 段落样式 */
+.markdown-paragraph {
   margin: 8px 0;
+  line-height: 1.7;
 }
 
-.content pre code {
+/* Markdown 列表样式 */
+.markdown-list, .markdown-ordered-list {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-list li, .markdown-ordered-list li {
+  margin: 4px 0;
+  line-height: 1.6;
+}
+
+/* 内联代码样式 */
+.inline-code {
+  background: rgba(116, 125, 232, 0.1);
+  color: #5a67d8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 0.9em;
+  font-weight: 500;
+  border: 1px solid rgba(116, 125, 232, 0.2);
+}
+
+.message.user .inline-code {
+  background: rgba(255, 255, 255, 0.2);
+  color: #f0f8ff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* 代码块样式 */
+.code-block-wrapper {
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.code-block {
+  background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+  color: #f8f8f2;
+  padding: 16px 20px;
+  border: none;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  position: relative;
+}
+
+.code-block::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+.code-block code {
   background: transparent;
   padding: 0;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+}
+
+/* 链接样式 */
+.markdown-link {
+  color: #4a90e2;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.markdown-link:hover {
+  color: #357abd;
+  border-bottom-color: #4a90e2;
+}
+
+.message.user .markdown-link {
+  color: #b3d9ff;
+  border-bottom-color: transparent;
+}
+
+.message.user .markdown-link:hover {
+  color: white;
+  border-bottom-color: #b3d9ff;
+}
+
+/* 表格样式 */
+.table-wrapper {
+  margin: 12px 0;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-size: 14px;
+}
+
+.markdown-table th {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  border: none;
+}
+
+.markdown-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #e3e8f0;
+  vertical-align: top;
+}
+
+.markdown-table tr:nth-child(even) td {
+  background: #f8f9fb;
+}
+
+.markdown-table tr:hover td {
+  background: #f1f3f9;
+}
+
+.message.user .markdown-table {
+  background: rgba(255, 255, 255, 0.95);
+  color: #2c3e50;
+}
+
+/* 引用样式 */
+.markdown-content blockquote {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-left: 4px solid #4a90e2;
+  background: #f8f9fb;
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+}
+
+.message.user .markdown-content blockquote {
+  background: rgba(255, 255, 255, 0.1);
+  border-left-color: rgba(255, 255, 255, 0.5);
 }
 
 /* 响应式设计 */
@@ -225,11 +513,80 @@ body {
     font-size: 1.3rem;
   }
   
-  .message .content {
-    max-width: 85%;
+  .messages {
+    padding: 16px;
+  }
+  
+  .message {
+    margin-bottom: 16px;
+  }
+  
+  .message-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+  
+  .message-content {
+    max-width: 82%;
+  }
+  
+  .message-body {
+    padding: 12px 16px;
+    border-radius: 16px;
+  }
+  
+  .message-body::before {
+    top: 12px;
   }
   
   .input-area {
     padding: 12px 16px;
+  }
+  
+  .markdown-content,
+  .text-content {
+    font-size: 14px;
+  }
+  
+  .code-block {
+    font-size: 13px;
+    padding: 12px 16px;
+  }
+  
+  .markdown-table {
+    font-size: 13px;
+  }
+  
+  .markdown-table th,
+  .markdown-table td {
+    padding: 8px 12px;
+  }
+}
+
+/* 深色模式支持（预留） */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1a1a1a;
+    color: #e4e4e7;
+  }
+  
+  .app {
+    background: #2d2d2d;
+    border-color: #404040;
+  }
+  
+  .message-body {
+    background: #3a3a3a;
+    border-color: #505050;
+    color: #e4e4e7;
+  }
+  
+  .message-body::before {
+    border-color: transparent #3a3a3a transparent transparent;
+  }
+  
+  .message.user .message-body::before {
+    border-color: transparent transparent transparent #4a90e2;
   }
 }

@@ -1,4 +1,4 @@
-// 改进的 Cloudflare Workers - 统一GraphQL Schema
+// 简化的 Cloudflare Workers - 只保留REST API
 
 // 环境变量验证
 function validateEnvironment(env) {
@@ -8,74 +8,7 @@ function validateEnvironment(env) {
   return true;
 }
 
-// DeepSeek API调用函数 - 增加错误处理和监控
-async function callDeepSeekAPI(messages, env) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-  try {
-    console.log('调用DeepSeek API，消息数量:', messages.length);
-    const startTime = Date.now();
-    
-    // 验证消息格式
-    if (!Array.isArray(messages) || messages.length === 0) {
-      throw new Error('消息数组无效或为空');
-    }
-
-    messages.forEach((msg, index) => {
-      if (!msg.role || !msg.content) {
-        throw new Error(`消息 ${index} 格式无效`);
-      }
-    });
-    
-    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
-        'User-Agent': 'AI-Chat-Tool/2.0.0',
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: messages,
-        max_tokens: 1000,
-        temperature: 0.7,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    const duration = Date.now() - startTime;
-    console.log(`DeepSeek API响应: ${response.status} 耗时 ${duration}ms`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('DeepSeek API错误:', response.status, errorText);
-      throw new Error(`DeepSeek API错误: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    
-    // 验证响应格式
-    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-      throw new Error('DeepSeek API返回数据格式无效');
-    }
-
-    console.log('DeepSeek API调用成功');
-    return data;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.error('DeepSeek API超时（15秒）');
-      throw new Error('请求超时，请稍后再试');
-    }
-    console.error('DeepSeek API错误:', error);
-    throw error;
-  }
-}
-
-// 统一的GraphQL处理函数
+// GraphQL处理函数
 async function handleGraphQL(request, env, startTime) {
   console.log('=== 处理GraphQL请求 ===');
   
@@ -126,7 +59,7 @@ async function handleGraphQL(request, env, startTime) {
       }, duration);
     }
 
-    // 处理chat mutation - 统一使用'chat'而不是'sendMessage'
+    // 处理chat mutation
     if (query.includes('mutation') && query.includes('chat')) {
       console.log('执行chat mutation');
       
@@ -165,6 +98,70 @@ async function handleGraphQL(request, env, startTime) {
       500,
       { 'X-Error-Type': 'INTERNAL_ERROR' }
     );
+  }
+}
+
+// DeepSeek API调用函数
+async function callDeepSeekAPI(messages, env) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    console.log('调用DeepSeek API，消息数量:', messages.length);
+    
+    // 验证消息格式
+    if (!Array.isArray(messages) || messages.length === 0) {
+      throw new Error('消息数组无效或为空');
+    }
+
+    messages.forEach((msg, index) => {
+      if (!msg.role || !msg.content) {
+        throw new Error(`消息 ${index} 格式无效`);
+      }
+    });
+    
+    const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.DEEPSEEK_API_KEY}`,
+        'User-Agent': 'AI-Chat-Tool/2.0.0',
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: messages,
+        max_tokens: 1000,
+        temperature: 0.7,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('DeepSeek API错误:', response.status, errorText);
+      throw new Error(`DeepSeek API错误: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    
+    // 验证响应格式
+    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      throw new Error('DeepSeek API返回数据格式无效');
+    }
+
+    console.log('DeepSeek API调用成功');
+    return data;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('DeepSeek API超时（15秒）');
+      throw new Error('请求超时，请稍后再试');
+    }
+    console.error('DeepSeek API错误:', error);
+    throw error;
   }
 }
 
@@ -240,14 +237,14 @@ export default {
         return handleCORS();
       }
 
-      // GraphQL端点 - 支持多个路径
+      // GraphQL端点 - 主要通信方式
       if (pathname === '/graphql' || pathname === '/api/graphql') {
         return await handleGraphQL(request, env, startTime);
       }
 
-      // REST API端点
+      // REST API端点 - 备用方案
       if (pathname === '/api/chat') {
-        console.log('处理REST聊天请求');
+        console.log('处理聊天请求');
         
         if (method !== 'POST') {
           return createErrorResponse(
@@ -269,22 +266,22 @@ export default {
         const data = await callDeepSeekAPI(body.messages, env);
         const duration = Date.now() - startTime;
         
-        console.log(`REST聊天完成，耗时 ${duration}ms`);
+        console.log(`聊天完成，耗时 ${duration}ms`);
         return createSuccessResponse(data, duration);
       }
 
       // 健康检查端点
-      if (pathname === '/health' || pathname === '/api/health') {
+      if (pathname === '/health') {
         const duration = Date.now() - startTime;
         return createSuccessResponse({
           status: 'ok',
           timestamp: new Date().toISOString(),
-          worker_version: '2.0.0',
+          worker_version: '2.1.0',
           environment: env.ENVIRONMENT || 'production',
           endpoints: {
             graphql: ['/graphql', '/api/graphql'],
             chat: '/api/chat',
-            health: ['/health', '/api/health']
+            health: '/health'
           },
           response_time: `${duration}ms`
         }, duration);
@@ -293,13 +290,13 @@ export default {
       // API根路径
       if (pathname === '/' || pathname === '/api') {
         return createSuccessResponse({
-          message: 'AI Chat Tool API v2.0',
+          message: 'AI Chat Tool API v2.1 (GraphQL + REST)',
           status: 'running',
-          worker_version: '2.0.0',
+          worker_version: '2.1.0',
           endpoints: {
             graphql: ['/graphql', '/api/graphql'],
             chat: '/api/chat',
-            health: ['/health', '/api/health']
+            health: '/health'
           },
           documentation: 'https://github.com/593496637/ai-chat-tool'
         });

@@ -4,7 +4,11 @@ interface ImportMetaEnv {
   readonly DEV: boolean
   readonly PROD: boolean
   readonly MODE: string
-  // 添加其他环境变量类型定义
+  
+  // 自定义环境变量类型声明
+  readonly VITE_GRAPHQL_ENDPOINT: string
+  readonly VITE_API_TIMEOUT: string
+  readonly VITE_DEBUG: string
 }
 
 interface ImportMeta {

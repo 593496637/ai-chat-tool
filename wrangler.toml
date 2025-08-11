@@ -6,24 +6,15 @@ compatibility_date = "2024-01-01"
 [env.production]
 vars = { ENVIRONMENT = "production" }
 
-# 更新路由配置 - 使用新域名 sunnyday.pw
+# GraphQL + REST 路由配置 - 使用新域名 sunnyday.pw
 [[env.production.routes]]
-pattern = "sunnyday.pw/"
-
-[[env.production.routes]]
-pattern = "sunnyday.pw/*"
+pattern = "sunnyday.pw/graphql"
 
 [[env.production.routes]]
 pattern = "sunnyday.pw/api/*"
 
 [[env.production.routes]]
-pattern = "sunnyday.pw/graphql"
-
-[[env.production.routes]]
 pattern = "sunnyday.pw/health"
-
-[[env.production.routes]]
-pattern = "sunnyday.pw/debug"
 
 # 开发环境
 [env.development]
